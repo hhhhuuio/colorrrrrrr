@@ -416,7 +416,7 @@ if uploaded_file is not None:
     # ═══════════════════════════════════════════════════════════
     # 色板列表 — 紧凑双列 + hover 显示比例和主色对比
     # ═══════════════════════════════════════════════════════════
-        half = (len(colors_prop) + 1) // 2
+    half = (len(colors_prop) + 1) // 2
     colors_left = list(zip(colors_prop, props_prop))[:half]
     colors_right = list(zip(colors_prop, props_prop))[half:]
 
