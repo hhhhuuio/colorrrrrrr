@@ -118,6 +118,7 @@ if uploaded_file is not None:
             st.subheader("🖼️ 原图预览")
             st.image(img, use_container_width=True)
             st.metric("有效提取色板总数", len(colors_prop))
+        # 电脑模式下主界面直接显示色环，去掉原图
         col_wheel = st.container()
     else:
         col_img, col_wheel = st.columns(PANEL_RATIO)
@@ -127,51 +128,37 @@ if uploaded_file is not None:
             st.metric("有效提取色板总数", len(colors_prop))
         
     with col_wheel:
-        st.subheader("⭕ 3D 交互式真实感光谱色柱 (含明度 Z 轴)")
+        st.subheader("⭕ 3D 交互式光谱色柱 (含明度 Z 轴)")
         fig_json = go.Figure()
         
-        # --- 【核心优化】构建高密度、无缝重叠的真实感连续色谱背景 ---
+        # 绘制背景色盘 (放置在 Z=1 的最高明度层)
+        rs = np.linspace(0.05, 1.0, 15) 
+        thetas = np.linspace(0, 360, 90, endpoint=False) 
         bg_x, bg_y, bg_z, bg_color = [], [], [], []
-        
-        # 采样线密度设定：保证点与点紧密相连融合成面
-        rs = np.linspace(0.0, 1.0, 35) 
-        thetas = np.linspace(0, 360, 140, endpoint=False) 
-        
-        # 1. 顶部真实色实体圆盘 (明度 V = 1.0)
         for r in rs:
             for t in thetas:
                 bg_x.append(r * math.cos(math.radians(t)))
                 bg_y.append(r * math.sin(math.radians(t)))
-                bg_z.append(1.0)
+                bg_z.append(1.0) # 背景盘在最上方
                 bg_color.append(mcolors.to_hex(colorsys.hsv_to_rgb(t/360.0, r, 1.0)))
                 
-        # 2. 侧面真实色实体外壁 (饱和度 S = 1.0，从上往下完美过渡到纯黑)
-        vs = np.linspace(0.0, 1.0, 25, endpoint=False) 
-        for v in vs:
-            for t in thetas:
-                bg_x.append(1.0 * math.cos(math.radians(t)))
-                bg_y.append(1.0 * math.sin(math.radians(t)))
-                bg_z.append(v)
-                bg_color.append(mcolors.to_hex(colorsys.hsv_to_rgb(t/360.0, 1.0, v)))
-                
-        # 用稍大尺寸的 Markers 相互重叠，渲染出丝滑的连续渐变晶体面
         fig_json.add_trace(go.Scatter3d(
             x=bg_x, y=bg_y, z=bg_z, mode='markers',
-            marker=dict(size=8, color=bg_color, opacity=0.45), 
+            marker=dict(size=4, color=bg_color, opacity=0.15),
             hoverinfo='skip', showlegend=False
         ))
         
-        # 3. 中心黑白明度轴
+        # 绘制中心明度轴 (从黑到白)
         axis_z = np.linspace(0, 1, 20)
         fig_json.add_trace(go.Scatter3d(
             x=np.zeros_like(axis_z), y=np.zeros_like(axis_z), z=axis_z, 
             mode='markers+lines',
-            line=dict(color='rgba(128,128,128,0.6)', width=2),
+            line=dict(color='gray', width=2),
             marker=dict(size=3, color=[mcolors.to_hex((v, v, v)) for v in axis_z]),
             hoverinfo='skip', showlegend=False
         ))
         
-        # 4. 渲染从原图中提取出的独立颜色散点（保持完全不透明、大尺寸突出显示）
+        # 绘制提取出的颜色 3D 散点
         pts_x, pts_y, pts_z, pts_color, pts_hover = [], [], [], [], []
         for c in colors_prop:
             h, s, v = colorsys.rgb_to_hsv(*c)
@@ -193,7 +180,7 @@ if uploaded_file is not None:
             )
             pts_hover.append(hover_text)
             
-            # 垂直投影虚线，辅助精确定位颜色所在的明度层
+            # 添加向底部的投影线，增强立体感
             fig_json.add_trace(go.Scatter3d(
                 x=[x, x], y=[y, y], z=[0, z],
                 mode='lines', line=dict(color=mcolors.to_hex(c), width=3, dash='dot'),
@@ -202,7 +189,7 @@ if uploaded_file is not None:
             
         fig_json.add_trace(go.Scatter3d(
             x=pts_x, y=pts_y, z=pts_z, mode='markers',
-            marker=dict(size=13, color=pts_color, line=dict(color='#ffffff', width=2.5), opacity=1.0),
+            marker=dict(size=12, color=pts_color, line=dict(color='#ffffff', width=2), opacity=1.0),
             text=pts_hover, hovertemplate="%{text}<extra></extra>",
             hoverlabel=dict(bgcolor="whitesmoke", font_size=11),
             showlegend=False
@@ -214,15 +201,16 @@ if uploaded_file is not None:
                 xaxis=dict(title='色相/饱和度 (X)', showticklabels=False, range=[-1.1, 1.1]),
                 yaxis=dict(title='色相/饱和度 (Y)', showticklabels=False, range=[-1.1, 1.1]),
                 zaxis=dict(title='明度轴 (Value)', range=[0, 1.1]),
-                camera=dict(eye=dict(x=1.3, y=1.3, z=1.0)) 
+                camera=dict(eye=dict(x=1.3, y=1.3, z=1.0)) # 默认倾斜视角
             ),
             hovermode='closest'
         )
+        # 将 displayModeBar 设为 True，右上角会出现原生菜单，支持“恢复默认(Reset Camera)”
         st.plotly_chart(fig_json, config={'displayModeBar': True}, use_container_width=True)
 
     st.divider()
 
-    # 3. 垂直同列线性分析面板
+    # 3. 垂直同列线性分析面板 (修正：放进 tabs 内确保等宽)
     st.subheader("📊 垂直演化色级面板")
     tab1, tab2, tab3, tab4 = st.tabs(["覆盖率色卡", "明度加权", "等宽色卡", "连续渐变"])
     
@@ -276,6 +264,7 @@ if uploaded_file is not None:
     st.divider()
     st.subheader("🎯 色板数据总览 (含预览)")
 
+    # 生成自定义 HTML 列表以支持色卡预览
     html_table = """
     <table style="width:100%; text-align:left; border-collapse: collapse;">
         <tr style="border-bottom: 1px solid #ddd; background-color: rgba(128,128,128,0.1);">
