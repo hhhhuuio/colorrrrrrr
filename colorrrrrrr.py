@@ -121,6 +121,7 @@ if uploaded_file is not None:
     else:
         col_img, col_wheel = st.columns(PANEL_RATIO)
     
+    col_img = st.container()   # 或者 col_img = st.columns(1)[0]
     with col_img:
         st.subheader("🖼️ 原图预览")
         st.image(img, use_container_width=True if layout_mode=='15.6寸电脑模式' else False, width=PREVIEW_WIDTH)
