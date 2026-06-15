@@ -202,27 +202,24 @@ def build_hue_wheel(colors_prop, props_prop, dominant_color, focus_main, wheel_s
         )
         pts_hover.append(hover_text)
 
-    # 为 hover 添加色块预览（使用 Unicode 方块）
-    pts_hover_enhanced = []
-    for c, p, color_hex in zip(colors_prop, props_prop, pts_color):
+    # 每个色点单独 trace，hover 背景色即为该颜色
+    for c, p, r, theta in zip(colors_prop, props_prop, pts_r, pts_theta):
         hex_val = mcolors.to_hex(c).upper()
         rgb_val = [int(x*255) for x in c]
-        swatch = "█" * 6
+        lum = 0.299*c[0] + 0.587*c[1] + 0.114*c[2]
+        font_color = "white" if lum < 0.5 else "black"
         hover_text = (
-            f"<span style='font-size:18px;'>{swatch}</span><br>"
             f"<b>{hex_val}</b><br>"
             f"RGB: {rgb_val}<br>"
             f"占比: {p*100:.2f}%"
         )
-        pts_hover_enhanced.append(hover_text)
-
-    fig.add_trace(go.Scatterpolar(
-        r=pts_r, theta=pts_theta, mode='markers',
-        marker=dict(size=dot_size, color=pts_color, line=dict(color='#ffffff', width=2)),
-        text=pts_hover_enhanced, hovertemplate="%{text}<extra></extra>",
-        hoverlabel=dict(bgcolor="white", font_size=11, bordercolor="rgba(0,0,0,0.2)"),
-        showlegend=False
-    ))
+        fig.add_trace(go.Scatterpolar(
+            r=[r], theta=[theta], mode='markers',
+            marker=dict(size=dot_size, color=hex_val, line=dict(color='#ffffff', width=2)),
+            text=[hover_text], hovertemplate="%{text}<extra></extra>",
+            hoverlabel=dict(bgcolor=hex_val, font_size=12, font_color=font_color, bordercolor="rgba(0,0,0,0.15)"),
+            showlegend=False
+        ))
 
     fig.update_traces(selector=dict(mode='markers'), unselected=dict(marker_opacity=0.9))
 
@@ -301,27 +298,24 @@ def build_value_wheel(colors_prop, props_prop, dominant_color, focus_main, wheel
         )
         pts_hover.append(hover_text)
 
-    # 为 hover 添加色块预览（使用 Unicode 方块）
-    pts_hover_enhanced = []
-    for c, p, color_hex in zip(colors_prop, props_prop, pts_color):
+    # 每个色点单独 trace，hover 背景色即为该颜色
+    for c, p, r, theta in zip(colors_prop, props_prop, pts_r, pts_theta):
         hex_val = mcolors.to_hex(c).upper()
         rgb_val = [int(x*255) for x in c]
-        swatch = "█" * 6
+        lum = 0.299*c[0] + 0.587*c[1] + 0.114*c[2]
+        font_color = "white" if lum < 0.5 else "black"
         hover_text = (
-            f"<span style='font-size:18px;'>{swatch}</span><br>"
             f"<b>{hex_val}</b><br>"
             f"RGB: {rgb_val}<br>"
             f"占比: {p*100:.2f}%"
         )
-        pts_hover_enhanced.append(hover_text)
-
-    fig.add_trace(go.Scatterpolar(
-        r=pts_r, theta=pts_theta, mode='markers',
-        marker=dict(size=dot_size, color=pts_color, line=dict(color='#ffffff', width=2)),
-        text=pts_hover_enhanced, hovertemplate="%{text}<extra></extra>",
-        hoverlabel=dict(bgcolor="white", font_size=11, bordercolor="rgba(0,0,0,0.2)"),
-        showlegend=False
-    ))
+        fig.add_trace(go.Scatterpolar(
+            r=[r], theta=[theta], mode='markers',
+            marker=dict(size=dot_size, color=hex_val, line=dict(color='#ffffff', width=2)),
+            text=[hover_text], hovertemplate="%{text}<extra></extra>",
+            hoverlabel=dict(bgcolor=hex_val, font_size=12, font_color=font_color, bordercolor="rgba(0,0,0,0.15)"),
+            showlegend=False
+        ))
 
     fig.update_traces(selector=dict(mode='markers'), unselected=dict(marker_opacity=0.9))
 
@@ -461,7 +455,7 @@ if uploaded_file is not None:
             ))
             start += p
         fig.update_layout(
-            barmode='stack', height=28, margin=dict(l=0, r=0, t=0, b=0),
+            barmode='stack', height=40, margin=dict(l=0, r=0, t=0, b=0),
             xaxis=dict(showgrid=False, showticklabels=False, zeroline=False, range=[0, 1]),
             yaxis=dict(showgrid=False, showticklabels=False, zeroline=False),
             plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
@@ -485,7 +479,7 @@ if uploaded_file is not None:
                 showlegend=False
             ))
         fig.update_layout(
-            barmode='stack', height=28, margin=dict(l=0, r=0, t=0, b=0),
+            barmode='stack', height=40, margin=dict(l=0, r=0, t=0, b=0),
             xaxis=dict(showgrid=False, showticklabels=False, zeroline=False, range=[0, 1]),
             yaxis=dict(showgrid=False, showticklabels=False, zeroline=False),
             plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
@@ -525,11 +519,12 @@ if uploaded_file is not None:
             x=[0.5], y=[0], mode='markers',
             marker=dict(size=0, opacity=0),
             hovertemplate=f"<b>连续渐变</b><br>基于 {n} 种颜色<extra></extra>",
-            showlegend=False
+            showlegend=False,
+            hoverlabel=dict(bgcolor="white", font_size=12, bordercolor="rgba(0,0,0,0.15)")
         ))
 
         fig.update_layout(
-            barmode='stack', height=28, margin=dict(l=0, r=0, t=0, b=0),
+            barmode='stack', height=40, margin=dict(l=0, r=0, t=0, b=0),
             xaxis=dict(showgrid=False, showticklabels=False, zeroline=False, range=[0, 1], fixedrange=True),
             yaxis=dict(showgrid=False, showticklabels=False, zeroline=False, fixedrange=True),
             plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
