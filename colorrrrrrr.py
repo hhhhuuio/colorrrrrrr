@@ -107,7 +107,11 @@ def build_hue_wheel(colors_prop, props_prop, dominant_color, focus_main, wheel_s
             s = r_mid
             thetas.append(theta_mid)
             rs.append(dr)
-            bar_colors.append(mcolors.to_hex(colorsys.hsv_to_rgb(h, s, 1.0)))
+            r, g, b = colorsys.hsv_to_rgb(h, s, 1.0)
+            r = max(0.0, min(1.0, r))
+            g = max(0.0, min(1.0, g))
+            b = max(0.0, min(1.0, b))
+            bar_colors.append(mcolors.to_hex((r, g, b)))
             widths.append(dtheta)
         fig.add_trace(go.Barpolar(
             r=rs, theta=thetas, width=widths, base=r_inner,
