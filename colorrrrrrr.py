@@ -8,169 +8,216 @@ import colorsys
 import json
 import io
 import struct
+import plotly.graph_objects as go
 
-# --- 核心分析与排序算法 ---
-def analyze_image(img_obj, threshold=0.001, n_clusters=20):
+# --- 全局紧凑样式注入 ---
+st.markdown("""
+    <style>
+    html, body, [data-testid="stMarkdownContainer"] { font-size: 0.85rem !important; }
+    h1 { font-size: 1.6rem !important; font-weight: 700; padding-top: 0px; }
+    h2 { font-size: 1.2rem !important; margin-top: 10px; }
+    h3 { font-size: 1.0rem !important; }
+    .stSlider, .stCheckbox { padding: 0px !important; margin: 0px !important; }
+    div[data-testid="stBlock"] { padding: 5px !important; }
+    </style>
+""", unsafe_allow_html=True)
+
+# --- 核心算法引擎 ---
+def analyze_image(img_obj, threshold=0.001, n_clusters=25):
     img_rgb = cv2.cvtColor(img_obj, cv2.COLOR_BGR2RGB)
-    pixels = cv2.resize(img_rgb, (100, 100)).reshape(-1, 3)
+    pixels = cv2.resize(img_rgb, (80, 80)).reshape(-1, 3)
     
-    # K-Means 聚类（数量即为容差精细度）
-    kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10).fit(pixels)
-    
+    kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=8).fit(pixels)
     counts = np.bincount(kmeans.labels_)
     proportions = counts / len(kmeans.labels_)
     
-    # 过滤低占比颜色
     mask = proportions >= threshold
     colors = kmeans.cluster_centers_[mask] / 255.0
     proportions = proportions[mask]
     
-    # 1. 按占比从大到小排序
+    # 1. 占比排序
     sort_idx_prop = np.argsort(proportions)[::-1]
     colors_prop = colors[sort_idx_prop]
     props_prop = proportions[sort_idx_prop]
     
-    # 2. 按明度由暗到亮排序 (Y = 0.299R + 0.587G + 0.114B)
-    luminance = np.array([0.299*c[0] + 0.587*c[1] + 0.114*c[2] for c in colors_prop])
-    sort_idx_lum = np.argsort(luminance)
-    colors_lum = colors_prop[sort_idx_lum]
-    
-    # 3. 计算焦点色（与其他主要颜色平均距离最远的颜色）
+    # 2. 计算焦点色（与其他主色平均色彩距离最远的孤立色）
+    focus_idx = 0
     if len(colors_prop) > 1:
-        avg_dists = []
-        for i, c in enumerate(colors_prop):
-            dists = [np.linalg.norm(c - other) for j, other in enumerate(colors_prop) if i != j]
-            avg_dists.append(np.mean(dists))
+        avg_dists = [np.mean([np.linalg.norm(c - other) for j, other in enumerate(colors_prop) if i != j]) for i, c in enumerate(colors_prop)]
         focus_idx = np.argmax(avg_dists)
-        focus_color = colors_prop[focus_idx]
-    else:
-        focus_color = colors_prop[0] if len(colors_prop) > 0 else np.array([0.0, 0.0, 0.0])
+    focus_color = colors_prop[focus_idx]
+    focus_prop = props_prop[focus_idx]
+    
+    return colors_prop, props_prop, focus_color, focus_prop
 
-    return colors_prop, props_prop, colors_lum, focus_color
+# --- UI 渲染界面 ---
+st.title("🎨 极致紧凑型专业色彩协同画布")
 
-# --- Streamlit 界面配置 ---
-st.set_page_config(page_title="高级色彩看板", layout="wide")
-st.title("🎨 极简色彩协同分析看板")
-
-# 1. 顶层控制面板
-st.markdown("### ⚙️ 控制参数")
-c_ctrl1, c_ctrl2, c_ctrl3, c_ctrl4 = st.columns(4)
-with c_ctrl1:
-    threshold = st.slider("最小占比阈值", 0.0001, 0.05, 0.002, format="%.4f")
-with c_ctrl2:
-    clusters = st.slider("色彩融合容差 (聚类数)", 5, 60, 25)
-with c_ctrl3:
-    show_focus_grad = st.checkbox("启用焦点色互补渐变", value=True)
-with c_ctrl4:
-    gen_aco = st.checkbox("准备 PS 色板 (.aco) 下载", value=True)
-
-uploaded_file = st.file_uploader("选择并上传你的设计图/摄影作品...", type=["jpg", "png", "jpeg"])
+uploaded_file = st.file_uploader("导入设计资产 (JPG / PNG)...", type=["jpg", "png", "jpeg"])
 
 if uploaded_file is not None:
-    # 转换内存图片
     file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
     img = cv2.imdecode(file_bytes, 1)
     
-    # 执行色彩核心算法
-    colors_prop, props_prop, colors_lum, focus_color = analyze_image(img, threshold=threshold, n_clusters=clusters)
+    # 1. 置顶紧凑控制面板
+    st.markdown("### ⚙️ 调控中心")
+    c_ctrl1, c_ctrl2, c_ctrl3, c_ctrl4 = st.columns(4)
+    with c_ctrl1:
+        threshold = st.slider("微量色过滤阈值", 0.0001, 0.03, 0.001, format="%.4f")
+    with c_ctrl2:
+        clusters = st.slider("色彩融合容差 (聚类中心数)", 5, 60, 24)
+    with c_ctrl3:
+        exclude_focus = st.checkbox("渐变条剔除低占比焦点色 (<5%)", value=True)
+    with c_ctrl4:
+        gen_aco = st.checkbox("准备 Adobe .aco 色板下载", value=True)
+
+    # 执行核心色彩分析
+    colors_prop, props_prop, focus_color, focus_prop = analyze_image(img, threshold=threshold, n_clusters=clusters)
+    dominant_color = colors_prop[0]  # 占比最大的主色
     
     st.divider()
     
-    # 2. 核心大模块：原图 与 实色色环 并排显示
-    col_img, col_wheel = st.columns(2)
+    # 2. 核心并排联动层：原图 VS 交互色环
+    col_img, col_wheel = st.columns([1, 1])
     
     with col_img:
-        st.subheader("🖼️ 原始图像")
-        st.image(cv2.cvtColor(img, cv2.COLOR_BGR2RGB), use_container_width=True)
-        st.metric("核心提取色板数量", len(colors_prop))
+        st.subheader("🖼️ 原图预览")
+        # 适当缩小图片展示尺寸
+        st.image(cv2.cvtColor(img, cv2.COLOR_BGR2RGB), use_container_width=False, width=380)
+        st.metric("有效提取色板总数", len(colors_prop))
         
     with col_wheel:
-        st.subheader("⭕ 实色光谱色环分布")
-        fig_wheel, ax_wheel = plt.subplots(figsize=(6, 6), subplot_kw={'projection': 'polar'})
+        st.subheader("⭕ 交互式光谱色环 (支持悬停放大与主色对比)")
         
-        # 绘制极坐标实色填充背景
-        r_space = np.linspace(0, 1, 40)
-        theta_space = np.linspace(0, 2*np.pi, 120)
-        C_rgb = np.zeros((len(r_space)-1, len(theta_space)-1, 3))
-        for i in range(len(r_space)-1):
-            r_c = (r_space[i] + r_space[i+1]) / 2
-            for j in range(len(theta_space)-1):
-                t_c = (theta_space[j] + theta_space[j+1]) / 2
-                C_rgb[i, j] = colorsys.hsv_to_rgb(t_c / (2*np.pi), r_c, 1.0)
+        # 利用 Plotly 构建具备全交互特性的实色填充色环
+        fig_json = go.Figure()
+        
+        # 映射生成背景光谱网格点
+        rs = np.linspace(0.1, 1.0, 15)
+        thetas = np.linspace(0, 360, 72, endpoint=False)
+        bg_theta, bg_r, bg_color = [], [], []
+        for r in rs:
+            for t in thetas:
+                bg_theta.append(t)
+                bg_r.append(r)
+                bg_color.append(mcolors.to_hex(colorsys.hsv_to_rgb(t/360.0, r, 1.0)))
                 
-        ax_wheel.pcolormesh(theta_space, r_space, C_rgb, shading='flat', zorder=1)
+        fig_json.add_trace(go.Scatterpolar(
+            r=bg_r, theta=bg_theta, mode='markers',
+            marker=dict(size=4, color=bg_color, opacity=0.25),
+            hoverinfo='skip', showlegend=False
+        ))
         
-        # 标出提取出来的主色点
+        # 动态计算并标记主色交互节点
+        pts_theta, pts_r, pts_color, pts_hover = [], [], [], []
         for c in colors_prop:
             h, s, v = colorsys.rgb_to_hsv(*c)
-            # 使用双色高对比度边框确保在任何背景色下都清晰可见
-            ax_wheel.plot(h*2*np.pi, s, 'o', color=c, markersize=14, 
-                          markeredgecolor='black', markeredgewidth=2, zorder=10)
-            ax_wheel.plot(h*2*np.pi, s, 'o', color=c, markersize=10, 
-                          markeredgecolor='white', markeredgewidth=1, zorder=11)
+            pts_theta.append(h * 360.0)
+            pts_r.append(s)
+            pts_color.append(mcolors.to_hex(c))
             
-        ax_wheel.set_yticklabels([])
-        ax_wheel.set_xticklabels([])
-        ax_wheel.grid(False)
-        st.pyplot(fig_wheel)
+            # 计算当前色与占比最大主色的色彩感知差异
+            c_diff = np.linalg.norm(c - dominant_color)
+            similarity = max(0.0, 100.0 - (c_diff * 50.0))
+            
+            hover_text = (
+                f"<b>十六进制:</b> {mcolors.to_hex(c).upper()}<br>"
+                f"<b>RGB 权重:</b> {[int(x*255) for x in c]}<br>"
+                f"<b>主色对比相似度:</b> {similarity:.1f}%"
+            )
+            pts_hover.append(hover_text)
+            
+        fig_json.add_trace(go.Scatterpolar(
+            r=pts_r, theta=pts_theta, mode='markers',
+            marker=dict(
+                size=14, color=pts_color, line=dict(color='#ffffff', width=2),
+                customdata=pts_color
+            ),
+            text=pts_hover, hovertemplate="%{text}<extra></extra>",
+            # 关键：配置鼠标悬停时节点放大预览机制
+            hoverlabel=dict(bgcolor="whitesmoke", font_size=11),
+            showlegend=False
+        ))
+        
+        # 优化交互动效与视窗尺寸
+        fig_json.update_traces(selector=dict(mode='markers+text'), unselected=dict(marker_opacity=0.7))
+        fig_json.update_layout(
+            width=360, height=360, margin=dict(l=10, r=10, t=10, b=10),
+            polar=dict(
+                angularaxis=dict(showticklabels=False, ticks='', showgrid=False),
+                radialaxis=dict(showticklabels=False, ticks='', showgrid=False)
+            ),
+            hovermode='closest'
+        )
+        st.plotly_chart(fig_json, config={'displayModeBar': False})
 
     st.divider()
 
-    # 3. 线性面板：色卡与渐变上下同列垂直展示
-    st.subheader("📊 线性色彩演化条")
+    # 3. 垂直同列线性分析面板
+    st.subheader("📊 垂直演化色级面板")
     
-    # Palette 1: 占比排序色卡
-    st.markdown("**1. 主色占比分配色卡 (按画面覆盖率由大到小)**")
-    fig_p1, ax_p1 = plt.subplots(figsize=(12, 0.8))
+    # Panel 1: 原始占比排序
+    st.markdown("**1. 画面覆盖率原始分配色卡 (按占比由大到小)**")
+    fig_m1, ax_m1 = plt.subplots(figsize=(11, 0.5))
     start = 0
     for c, p in zip(colors_prop, props_prop):
-        ax_p1.barh(0, p, left=start, color=c, height=1, edgecolor='none')
+        ax_m1.barh(0, p, left=start, color=c, height=1)
         start += p
-    ax_p1.axis('off')
-    st.pyplot(fig_p1)
+    ax_m1.axis('off')
+    st.pyplot(fig_m1)
     
-    # Palette 2: 明度排序离散色卡
-    st.markdown("**2. 等宽明度阶梯色卡 (离散型：由暗至亮排序)**")
-    fig_p2, ax_p2 = plt.subplots(figsize=(12, 0.8))
-    n_cls = len(colors_lum)
+    # 计算明度排序索引
+    lums = np.array([0.299*c[0] + 0.587*c[1] + 0.114*c[2] for c in colors_prop])
+    idx_lum_asc = np.argsort(lums)
+    colors_lum = colors_prop[idx_lum_asc]
+    props_lum = props_prop[idx_lum_asc]
+    
+    # Panel 2: 保留空间比例宽度的明度排序色卡
+    st.markdown("**2. 加权明度梯度色卡 (保留面积占比 ➡️ 依明度由暗至亮重排)**")
+    fig_m2, ax_m2 = plt.subplots(figsize=(11, 0.5))
+    start_lum = 0
+    for c, p in zip(colors_lum, props_lum):
+        ax_m2.barh(0, p, left=start_lum, color=c, height=1)
+        start_lum += p
+    ax_m2.axis('off')
+    st.pyplot(fig_m2)
+    
+    # Panel 3: 等宽离散明度阶梯
+    st.markdown("**3. 标准明度等宽离散色卡 (由暗至亮排列)**")
+    fig_m3, ax_m3 = plt.subplots(figsize=(11, 0.5))
+    n_total = len(colors_lum)
     for i, c in enumerate(colors_lum):
-        ax_p2.barh(0, 1/n_cls, left=i/n_cls, color=c, height=1, edgecolor='none')
-    ax_p2.axis('off')
-    st.pyplot(fig_p2)
+        ax_m3.barh(0, 1/n_total, left=i/n_total, color=c, height=1)
+    ax_m3.axis('off')
+    st.pyplot(fig_m3)
     
-    # Palette 3: 明度连续渐变
-    st.markdown("**3. 空间明度连续平衡渐变条**")
-    fig_p3, ax_p3 = plt.subplots(figsize=(12, 0.8))
-    cmap_lum = mcolors.LinearSegmentedColormap.from_list("lum_grad", colors_lum)
-    ax_p3.imshow(np.linspace(0, 1, 768).reshape(1, -1), aspect='auto', cmap=cmap_lum)
-    ax_p3.axis('off')
-    st.pyplot(fig_p3)
+    # Panel 4: 空间平衡连续渐变 (支持智能过滤选项)
+    st.markdown("**4. 平滑明度平衡连续渐变条**")
+    fig_m4, ax_m4 = plt.subplots(figsize=(11, 0.5))
     
-    # Palette 4: 焦点色对比渐变（按选项开启）
-    if show_focus_grad and len(colors_prop) > 0:
-        st.markdown(f"**4. 🎯 焦点色交互对比渐变 (左侧互补色 ➡️ 右侧逆向焦点色: `{mcolors.to_hex(focus_color)}`)**")
-        h_f, s_f, v_f = colorsys.rgb_to_hsv(*focus_color)
-        comp_h = (h_f + 0.5) % 1.0
-        comp_color = colorsys.hsv_to_rgb(comp_h, s_f, v_f)
+    # 执行智能剔除逻辑
+    if exclude_focus and focus_prop < 0.05 and len(colors_lum) > 2:
+        # 如果焦点色占比小于5%，从渐变序列中抽离，避免破坏整体平滑过渡
+        colors_for_grad = [c for c in colors_lum if not np.array_equal(c, focus_color)]
+    else:
+        colors_for_grad = colors_lum
         
-        fig_p4, ax_p4 = plt.subplots(figsize=(12, 0.8))
-        cmap_focus = mcolors.LinearSegmentedColormap.from_list("focus_grad", [comp_color, focus_color])
-        ax_p4.imshow(np.linspace(0, 1, 768).reshape(1, -1), aspect='auto', cmap=cmap_focus)
-        ax_p4.axis('off')
-        st.pyplot(fig_p4)
+    cmap_custom = mcolors.LinearSegmentedColormap.from_list("custom_lum", colors_for_grad)
+    ax_m4.imshow(np.linspace(0, 1, 1024).reshape(1, -1), aspect='auto', cmap=cmap_custom)
+    ax_m4.axis('off')
+    st.pyplot(fig_m4)
 
     st.divider()
 
-    # 4. 数据资产下载区域
-    st.subheader("💾 资产导出")
+    # 4. 数据资产输出
+    st.subheader("💾 工业资产导出")
     col_d1, col_d2 = st.columns(2)
-    
-    hex_list = [mcolors.to_hex(c) for c in colors_prop]
-    col_d1.download_button("📥 下载标准配色 JSON 数据", json.dumps(hex_list, indent=4), "color_palette.json")
+    hex_data = [mcolors.to_hex(c) for c in colors_prop]
+    col_d1.download_button("📥 导出生产环境 JSON", json.dumps(hex_data, indent=2), "palette.json")
     
     if gen_aco:
         buf = io.BytesIO()
         buf.write(struct.pack('>HH', 1, len(colors_prop)))
         for c in colors_prop:
             buf.write(struct.pack('>HHHHH', 0, int(c[0]*255)*257, int(c[1]*255)*257, int(c[2]*255)*257, 0))
-        col_d2.download_button("📥 下载 Adobe Photoshop 色板 (.aco)", buf.getvalue(), "palette.aco")
+        col_d2.download_button("📥 导出 Photoshop (.aco) 色板", buf.getvalue(), "palette.aco")
