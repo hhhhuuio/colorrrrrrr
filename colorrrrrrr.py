@@ -10,7 +10,6 @@ import io
 import struct
 import plotly.graph_objects as go
 import os
-import math
 
 # --- 全局紧凑样式注入 ---
 st.markdown("""
@@ -26,13 +25,10 @@ st.markdown("""
         padding:10px;
         border:1px solid rgba(128,128,128,.2);
     }
-    .color-preview-box {
-        width: 30px; 
-        height: 20px; 
-        border-radius: 4px; 
-        border: 1px solid #ddd;
-        display: inline-block;
-    }
+    .color-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.95rem; }
+    .color-table th { border-bottom: 2px solid rgba(128,128,128,0.2); padding: 8px; text-align: left; }
+    .color-table td { border-bottom: 1px solid rgba(128,128,128,0.1); padding: 8px; vertical-align: middle; }
+    .color-preview { width: 36px; height: 24px; border-radius: 4px; border: 1px solid rgba(128,128,128,0.3); }
     </style>
 """, unsafe_allow_html=True)
 
@@ -51,13 +47,14 @@ if layout_mode == "12.4寸平板模式":
     st.set_page_config(layout="centered")
 else:
     PREVIEW_WIDTH = 650
-    WHEEL_SIZE = 650
+    WHEEL_SIZE = 560
+    PANEL_RATIO = [1.1, 1.2]
     st.set_page_config(layout="wide")
 
 
 # --- 核心算法引擎 ---
-def analyze_image(img_obj, threshold=0.001, n_clusters=25):
-    img_resized = img_obj.resize((80, 80))
+@st.cache_data
+def analyze_image(img_resized, threshold=0.001, n_clusters=25):
     pixels = np.array(img_resized).reshape(-1, 3)
     
     kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=8).fit(pixels)
@@ -88,207 +85,202 @@ uploaded_file = st.file_uploader("导入设计资产 (JPG / PNG)...", type=["jpg
 
 if uploaded_file is not None:
     img = Image.open(uploaded_file).convert('RGB')
+    img_resized = img.resize((80, 80)) # 缩小以加速缓存分析
     
     default_img_name = os.path.splitext(uploaded_file.name)[0]
     
     # 1. 置顶紧凑控制面板
     st.sidebar.markdown("### ⚙️ 调控中心")
-    palette_name = st.sidebar.text_input("📝 色板组名称", value=default_img_name)
+    
+    palette_name = st.sidebar.text_input("📝 色板组名称 (默认使用图片名，支持修改)", value=default_img_name)
     
     c_ctrl1, c_ctrl2 = st.sidebar.columns(2)
     c_ctrl3, c_ctrl4 = st.sidebar.columns(2)
     with c_ctrl1:
         threshold = st.slider("微量色过滤阈值", 0.0001, 0.03, 0.001, format="%.4f")
     with c_ctrl2:
-        clusters = st.slider("色彩融合容差 (聚类数)", 5, 60, 24)
+        clusters = st.slider("色彩融合容差 (聚类中心数)", 5, 60, 24)
     with c_ctrl3:
         exclude_focus = st.checkbox("渐变条剔除低占比焦点色 (<5%)", value=True)
     with c_ctrl4:
         gen_aco = st.checkbox("准备 Adobe .aco 下载", value=True)
 
-    colors_prop, props_prop, focus_color, focus_prop = analyze_image(img, threshold=threshold, n_clusters=clusters)
+    st.sidebar.markdown("### ⭕ 色环视图")
+    focus_main = st.sidebar.checkbox("聚焦主色区域", value=False)
+
+    colors_prop, props_prop, focus_color, focus_prop = analyze_image(img_resized, threshold=threshold, n_clusters=clusters)
     dominant_color = colors_prop[0]  
     
     st.divider()
     
-    # 2. 核心联动层：布局控制
+    # 2. 核心并排联动层：原图 VS 交互色环
+    # 【需求4更新】：电脑模式下原图移至侧边栏，主体区域留白给色环
     if layout_mode == "15.6寸电脑模式":
         with st.sidebar:
-            st.markdown("---")
+            st.divider()
             st.subheader("🖼️ 原图预览")
             st.image(img, use_container_width=True)
             st.metric("有效提取色板总数", len(colors_prop))
-        # 电脑模式下主界面直接显示色环，去掉原图
         col_wheel = st.container()
     else:
         col_img, col_wheel = st.columns(PANEL_RATIO)
         with col_img:
             st.subheader("🖼️ 原图预览")
-            st.image(img, width=PREVIEW_WIDTH)
+            st.image(img, use_container_width=False, width=PREVIEW_WIDTH)
             st.metric("有效提取色板总数", len(colors_prop))
         
     with col_wheel:
-        st.subheader("⭕ 3D 交互式光谱色柱 (含明度 Z 轴)")
+        cw_1, cw_2 = st.columns([4, 1])
+        with cw_1:
+            st.subheader("⭕ 交互式光谱色环")
+        with cw_2:
+            # 【需求3更新】：添加一键恢复默认视图按钮，触发重绘重置视角
+            if st.button("🔄 恢复默认", use_container_width=True):
+                pass 
+                
         fig_json = go.Figure()
         
-        # 绘制背景色盘 (放置在 Z=1 的最高明度层)
-        rs = np.linspace(0.05, 1.0, 15) 
-        thetas = np.linspace(0, 360, 90, endpoint=False) 
-        bg_x, bg_y, bg_z, bg_color = [], [], [], []
+        rs = np.linspace(0.05, 1.0, 25) 
+        thetas = np.linspace(0, 360, 180, endpoint=False) 
+        bg_theta, bg_r, bg_color = [], [], []
         for r in rs:
             for t in thetas:
-                bg_x.append(r * math.cos(math.radians(t)))
-                bg_y.append(r * math.sin(math.radians(t)))
-                bg_z.append(1.0) # 背景盘在最上方
+                bg_theta.append(t)
+                bg_r.append(r)
                 bg_color.append(mcolors.to_hex(colorsys.hsv_to_rgb(t/360.0, r, 1.0)))
                 
-        fig_json.add_trace(go.Scatter3d(
-            x=bg_x, y=bg_y, z=bg_z, mode='markers',
-            marker=dict(size=4, color=bg_color, opacity=0.15),
+        fig_json.add_trace(go.Scatterpolar(
+            r=bg_r, theta=bg_theta, mode='markers',
+            marker=dict(size=10, color=bg_color, opacity=1.0),
             hoverinfo='skip', showlegend=False
         ))
         
-        # 绘制中心明度轴 (从黑到白)
-        axis_z = np.linspace(0, 1, 20)
-        fig_json.add_trace(go.Scatter3d(
-            x=np.zeros_like(axis_z), y=np.zeros_like(axis_z), z=axis_z, 
-            mode='markers+lines',
-            line=dict(color='gray', width=2),
-            marker=dict(size=3, color=[mcolors.to_hex((v, v, v)) for v in axis_z]),
-            hoverinfo='skip', showlegend=False
-        ))
-        
-        # 绘制提取出的颜色 3D 散点
-        pts_x, pts_y, pts_z, pts_color, pts_hover = [], [], [], [], []
+        pts_theta, pts_r, pts_color, pts_hover = [], [], [], []
         for c in colors_prop:
             h, s, v = colorsys.rgb_to_hsv(*c)
-            x = s * math.cos(h * 2 * math.pi)
-            y = s * math.sin(h * 2 * math.pi)
-            z = v
-            pts_x.append(x)
-            pts_y.append(y)
-            pts_z.append(z)
+            pts_theta.append(h * 360.0)
+            pts_r.append(s)
             pts_color.append(mcolors.to_hex(c))
             
             c_diff = np.linalg.norm(c - dominant_color)
             similarity = max(0.0, 100.0 - (c_diff * 50.0))
+            
             hover_text = (
                 f"<b>十六进制:</b> {mcolors.to_hex(c).upper()}<br>"
-                f"<b>RGB:</b> {[int(x*255) for x in c]}<br>"
-                f"<b>HSV(明度):</b> {v:.2f}<br>"
-                f"<b>主色相似度:</b> {similarity:.1f}%"
+                f"<b>RGB 权重:</b> {[int(x*255) for x in c]}<br>"
+                f"<b>主色对比相似度:</b> {similarity:.1f}%"
             )
             pts_hover.append(hover_text)
             
-            # 添加向底部的投影线，增强立体感
-            fig_json.add_trace(go.Scatter3d(
-                x=[x, x], y=[y, y], z=[0, z],
-                mode='lines', line=dict(color=mcolors.to_hex(c), width=3, dash='dot'),
-                showlegend=False, hoverinfo='skip'
-            ))
-            
-        fig_json.add_trace(go.Scatter3d(
-            x=pts_x, y=pts_y, z=pts_z, mode='markers',
-            marker=dict(size=12, color=pts_color, line=dict(color='#ffffff', width=2), opacity=1.0),
+        fig_json.add_trace(go.Scatterpolar(
+            r=pts_r, theta=pts_theta, mode='markers',
+            marker=dict(
+                size=18, color=pts_color, line=dict(color='#ffffff', width=3)
+            ),
+            customdata=pts_color,  
             text=pts_hover, hovertemplate="%{text}<extra></extra>",
             hoverlabel=dict(bgcolor="whitesmoke", font_size=11),
             showlegend=False
         ))
         
+        fig_json.update_traces(selector=dict(mode='markers'), unselected=dict(marker_opacity=0.9))
         fig_json.update_layout(
-            width=WHEEL_SIZE, height=WHEEL_SIZE, margin=dict(l=0, r=0, t=0, b=0),
-            scene=dict(
-                xaxis=dict(title='色相/饱和度 (X)', showticklabels=False, range=[-1.1, 1.1]),
-                yaxis=dict(title='色相/饱和度 (Y)', showticklabels=False, range=[-1.1, 1.1]),
-                zaxis=dict(title='明度轴 (Value)', range=[0, 1.1]),
-                camera=dict(eye=dict(x=1.3, y=1.3, z=1.0)) # 默认倾斜视角
+            width=WHEEL_SIZE, height=WHEEL_SIZE, margin=dict(l=10, r=10, t=10, b=10),
+            polar=dict(
+                angularaxis=dict(showticklabels=False, ticks='', showgrid=False),
+                radialaxis=dict(showticklabels=False, ticks='', showgrid=False)
             ),
             hovermode='closest'
         )
-        # 将 displayModeBar 设为 True，右上角会出现原生菜单，支持“恢复默认(Reset Camera)”
-        st.plotly_chart(fig_json, config={'displayModeBar': True}, use_container_width=True)
+        st.plotly_chart(fig_json, config={'displayModeBar': False})
 
     st.divider()
 
-    # 3. 垂直同列线性分析面板 (修正：放进 tabs 内确保等宽)
-    st.subheader("📊 垂直演化色级面板")
-    tab1, tab2, tab3, tab4 = st.tabs(["覆盖率色卡", "明度加权", "等宽色卡", "连续渐变"])
+    # 3. 垂直同列线性分析面板
+    cv_1, cv_2 = st.columns([3, 2])
+    with cv_1: st.subheader("📊 垂直演化色级面板")
+    # 【需求5更新】：增加四卡同屏显示的全局开关
+    with cv_2: view_mode = st.radio("色卡显示模式", ["🗂️ 标签页隔离显示", "📜 四排同屏全览"], horizontal=True, label_visibility="collapsed")
     
-    with tab1:
-        st.markdown("**1. 画面覆盖率原始分配色卡 (按占比由大到小)**")
-        fig_m1, ax_m1 = plt.subplots(figsize=(11, 0.6))
-        start = 0
-        for c, p in zip(colors_prop, props_prop):
-            ax_m1.barh(0, p, left=start, color=c, height=1)
-            start += p
-        ax_m1.axis('off')
-        st.pyplot(fig_m1, use_container_width=True)
+    # 【需求1更新】：使用严格的绘图生成器，切除所有外边距 (margin)，确保离散色卡和连续渐变 (imshow) 像素级等宽对齐
+    def create_aligned_axis():
+        fig, ax = plt.subplots(figsize=(11, 0.5))
+        fig.subplots_adjust(left=0, right=1, top=1, bottom=0) # 剔除留白
+        ax.axis('off')
+        ax.set_xlim(0, 1)
+        ax.set_ylim(-0.5, 0.5)
+        return fig, ax
+
+    fig_m1, ax_m1 = create_aligned_axis()
+    start = 0
+    for c, p in zip(colors_prop, props_prop):
+        ax_m1.barh(0, p, left=start, color=c, height=1)
+        start += p
     
     lums = np.array([0.299*c[0] + 0.587*c[1] + 0.114*c[2] for c in colors_prop])
     idx_lum_asc = np.argsort(lums)
     colors_lum = colors_prop[idx_lum_asc]
     props_lum = props_prop[idx_lum_asc]
     
-    with tab2:
-        st.markdown("**2. 加权明度梯度色卡 (保留面积占比 ➡️ 依明度由暗至亮重排)**")
-        fig_m2, ax_m2 = plt.subplots(figsize=(11, 0.6))
-        start_lum = 0
-        for c, p in zip(colors_lum, props_lum):
-            ax_m2.barh(0, p, left=start_lum, color=c, height=1)
-            start_lum += p
-        ax_m2.axis('off')
-        st.pyplot(fig_m2, use_container_width=True)
+    fig_m2, ax_m2 = create_aligned_axis()
+    start_lum = 0
+    for c, p in zip(colors_lum, props_lum):
+        ax_m2.barh(0, p, left=start_lum, color=c, height=1)
+        start_lum += p
     
-    with tab3:
-        st.markdown("**3. 标准明度等宽离散色卡 (由暗至亮排列)**")
-        fig_m3, ax_m3 = plt.subplots(figsize=(11, 0.6))
-        n_total = len(colors_lum)
-        for i, c in enumerate(colors_lum):
-            ax_m3.barh(0, 1/n_total, left=i/n_total, color=c, height=1)
-        ax_m3.axis('off')
-        st.pyplot(fig_m3, use_container_width=True)
+    fig_m3, ax_m3 = create_aligned_axis()
+    n_total = len(colors_lum)
+    for i, c in enumerate(colors_lum):
+        ax_m3.barh(0, 1/n_total, left=i/n_total, color=c, height=1)
     
-    with tab4:
-        st.markdown("**4. 平滑明度平衡连续渐变条**")
-        fig_m4, ax_m4 = plt.subplots(figsize=(11, 0.6))
-        if exclude_focus and focus_prop < 0.05 and len(colors_lum) > 2:
-            colors_for_grad = [c for c in colors_lum if not np.array_equal(c, focus_color)]
-        else:
-            colors_for_grad = colors_lum
-        cmap_custom = mcolors.LinearSegmentedColormap.from_list("custom_lum", colors_for_grad)
-        ax_m4.imshow(np.linspace(0, 1, 1024).reshape(1, -1), aspect='auto', cmap=cmap_custom)
-        ax_m4.axis('off')
-        st.pyplot(fig_m4, use_container_width=True)
+    fig_m4, ax_m4 = create_aligned_axis()
+    if exclude_focus and focus_prop < 0.05 and len(colors_lum) > 2:
+        colors_for_grad = [c for c in colors_lum if not np.array_equal(c, focus_color)]
+    else:
+        colors_for_grad = colors_lum
+    cmap_custom = mcolors.LinearSegmentedColormap.from_list("custom_lum", colors_for_grad)
+    ax_m4.imshow(np.linspace(0, 1, 1024).reshape(1, -1), aspect='auto', cmap=cmap_custom, extent=[0, 1, -0.5, 0.5])
 
+    # 渲染色卡层
+    if view_mode == "🗂️ 标签页隔离显示":
+        tab1, tab2, tab3, tab4 = st.tabs(["覆盖率色卡", "明度加权", "等宽色卡", "连续渐变"])
+        with tab1:
+            st.markdown("**1. 画面覆盖率原始分配色卡 (按占比由大到小)**")
+            st.pyplot(fig_m1)
+        with tab2:
+            st.markdown("**2. 加权明度梯度色卡 (保留面积占比 ➡️ 依明度由暗至亮重排)**")
+            st.pyplot(fig_m2)
+        with tab3:
+            st.markdown("**3. 标准明度等宽离散色卡 (由暗至亮排列)**")
+            st.pyplot(fig_m3)
+        with tab4:
+            st.markdown("**4. 平滑明度平衡连续渐变条**")
+            st.pyplot(fig_m4)
+    else:
+        st.markdown("**1. 画面覆盖率原始分配色卡 (按占比由大到小)**")
+        st.pyplot(fig_m1)
+        st.markdown("**2. 加权明度梯度色卡 (保留面积占比 ➡️ 依明度由暗至亮重排)**")
+        st.pyplot(fig_m2)
+        st.markdown("**3. 标准明度等宽离散色卡 (由暗至亮排列)**")
+        st.pyplot(fig_m3)
+        st.markdown("**4. 平滑明度平衡连续渐变条**")
+        st.pyplot(fig_m4)
     
     st.divider()
-    st.subheader("🎯 色板数据总览 (含预览)")
+    st.subheader("🎯 色板数据总览")
 
-    # 生成自定义 HTML 列表以支持色卡预览
-    html_table = """
-    <table style="width:100%; text-align:left; border-collapse: collapse;">
-        <tr style="border-bottom: 1px solid #ddd; background-color: rgba(128,128,128,0.1);">
-            <th style="padding: 8px;">颜色预览</th>
-            <th style="padding: 8px;">HEX</th>
-            <th style="padding: 8px;">RGB</th>
-            <th style="padding: 8px;">面积占比</th>
-        </tr>
+    # 【需求2更新】：重构数据表格，通过 HTML+CSS 原生注入色块预览，彻底替代默认 Dataframe 的生硬感
+    table_html = """
+    <table class="color-table">
+        <tr><th>颜色预览</th><th>HEX 编码</th><th>RGB 通道</th><th>画面占比</th></tr>
     """
     for c, p in zip(colors_prop, props_prop):
         hex_code = mcolors.to_hex(c).upper()
-        rgb_code = f"{int(c[0]*255)}, {int(c[1]*255)}, {int(c[2]*255)}"
-        prop_str = f"{p*100:.2f}%"
-        html_table += f"""
-        <tr style="border-bottom: 1px solid #eee;">
-            <td style="padding: 8px;"><div class="color-preview-box" style="background-color: {hex_code};"></div></td>
-            <td style="padding: 8px; font-family: monospace;">{hex_code}</td>
-            <td style="padding: 8px; font-family: monospace;">{rgb_code}</td>
-            <td style="padding: 8px;">{prop_str}</td>
-        </tr>
-        """
-    html_table += "</table>"
+        rgb_str = f"{int(c[0]*255)}, {int(c[1]*255)}, {int(c[2]*255)}"
+        table_html += f"<tr><td><div class='color-preview' style='background-color: {hex_code};'></div></td><td><code>{hex_code}</code></td><td><code>{rgb_str}</code></td><td>{p*100:.2f}%</td></tr>"
+    table_html += "</table>"
     
-    st.markdown(html_table, unsafe_allow_html=True)
+    st.markdown(table_html, unsafe_allow_html=True)
 
     st.divider()
 
