@@ -82,6 +82,25 @@ def analyze_image_colors(image_path, threshold=0.05, n_clusters=20):
 
 if __name__ == '__main__':
     # 使用方法: python script.py image.jpg 0.05
-    file = sys.argv[1] if len(sys.argv) > 1 else 'test.jpg'
-    thr = float(sys.argv[2]) if len(sys.argv) > 2 else 0.05
-    analyze_image_colors(file, threshold=thr)
+    import streamlit as st
+
+# ... (保持原有的 analyze_image_colors 函数不变) ...
+
+st.title("🎨 色彩分析工具")
+uploaded_file = st.file_uploader("请上传一张图片...", type=["jpg", "png", "jpeg"])
+
+if uploaded_file is not None:
+    # 将上传的文件转为 OpenCV 可读的格式
+    file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
+    img = cv2.imdecode(file_bytes, 1)
+    
+    # 临时保存或直接传入 img 对象进行分析
+    # 为了兼容你现有的函数，建议稍微修改一下 analyze_image_colors 
+    # 让它接受 img 对象而不是文件路径
+    analyze_image_colors_from_obj(img) 
+
+def analyze_image_colors_from_obj(img, threshold=0.05, n_clusters=20):
+    # 这里的逻辑和之前的 analyze_image_colors 一模一样
+    # 只是第一行把 cv2.imread(image_path) 改为直接使用传入的 img
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    # ... (其余代码保持不变)
