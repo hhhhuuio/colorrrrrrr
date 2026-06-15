@@ -1,5 +1,5 @@
 import streamlit as st
-from PIL import Image  # 替换 cv2，完美兼容云端无头环境
+from PIL import Image  # 替换 cv2，彻底免除云端 libGL 系统依赖报错
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
@@ -24,7 +24,7 @@ st.markdown("""
 
 # --- 核心算法引擎 ---
 def analyze_image(img_obj, threshold=0.001, n_clusters=25):
-    # img_obj 传入时已经是 PIL 的 RGB 图像对象，无需再手动进行 BGR2RGB 转换
+    # PIL 打开的图像默认即为标准 RGB 模式，无需像 OpenCV 那样进行复杂的 BGR 转换
     img_resized = img_obj.resize((80, 80))
     pixels = np.array(img_resized).reshape(-1, 3)
     
@@ -57,7 +57,7 @@ st.title("🎨 极致紧凑型专业色彩协同画布")
 uploaded_file = st.file_uploader("导入设计资产 (JPG / PNG)...", type=["jpg", "png", "jpeg"])
 
 if uploaded_file is not None:
-    # 采用 PIL 安全、高效地在内存中解码并统一转换为标准的 RGB 模式
+    # 使用 PIL 安全、轻量地在内存中加载图片
     img = Image.open(uploaded_file).convert('RGB')
     
     # 1. 置顶紧凑控制面板
@@ -83,7 +83,7 @@ if uploaded_file is not None:
     
     with col_img:
         st.subheader("🖼️ 原图预览")
-        # Streamlit 原生对 PIL 对象的自适应支持极佳
+        # 直接原生渲染 PIL 图像对象
         st.image(img, use_container_width=False, width=380)
         st.metric("有效提取色板总数", len(colors_prop))
         
@@ -103,19 +103,11 @@ if uploaded_file is not None:
                 bg_r.append(r)
                 bg_color.append(mcolors.to_hex(colorsys.hsv_to_rgb(t/360.0, r, 1.0)))
                 
-                # 修改这部分代码：将 customdata 移出 marker 字典
         fig_json.add_trace(go.Scatterpolar(
-            r=pts_r, theta=pts_theta, mode='markers',
-            marker=dict(
-                size=14, color=pts_color, line=dict(color='#ffffff', width=2)
-            ),
-            customdata=pts_color, # 正确位置：作为 go.Scatterpolar 的直接参数
-            text=pts_hover, 
-            hovertemplate="%{text}<extra></extra>",
-            hoverlabel=dict(bgcolor="whitesmoke", font_size=11),
-            showlegend=False
+            r=bg_r, theta=bg_theta, mode='markers',
+            marker=dict(size=4, color=bg_color, opacity=0.25),
+            hoverinfo='skip', showlegend=False
         ))
-
         
         # 动态计算并标记主色交互节点
         pts_theta, pts_r, pts_color, pts_hover = [], [], [], []
@@ -139,17 +131,17 @@ if uploaded_file is not None:
         fig_json.add_trace(go.Scatterpolar(
             r=pts_r, theta=pts_theta, mode='markers',
             marker=dict(
-                size=14, color=pts_color, line=dict(color='#ffffff', width=2),
-                customdata=pts_color
+                size=14, color=pts_color, line=dict(color='#ffffff', width=2)
             ),
+            customdata=pts_color,  # 【关键修复】: 将 customdata 从 marker 字典内移出，彻底解决 Bad property path 报错
             text=pts_hover, hovertemplate="%{text}<extra></extra>",
-            # 关键：配置鼠标悬停时节点放大预览机制
+            # 配置鼠标悬停时节点放大预览机制
             hoverlabel=dict(bgcolor="whitesmoke", font_size=11),
             showlegend=False
         ))
         
         # 优化交互动效与视窗尺寸
-        fig_json.update_traces(selector=dict(mode='markers+text'), unselected=dict(marker_opacity=0.7))
+        fig_json.update_traces(selector=dict(mode='markers'), unselected=dict(marker_opacity=0.7))
         fig_json.update_layout(
             width=360, height=360, margin=dict(l=10, r=10, t=10, b=10),
             polar=dict(
@@ -197,7 +189,7 @@ if uploaded_file is not None:
     n_total = len(colors_lum)
     for i, c in enumerate(colors_lum):
         ax_m3.barh(0, 1/n_total, left=i/n_total, color=c, height=1)
-    fig_m3.gca().set_axis_off()
+    ax_m3.axis('off')
     st.pyplot(fig_m3)
     
     # Panel 4: 空间平衡连续渐变 (支持智能过滤选项)
