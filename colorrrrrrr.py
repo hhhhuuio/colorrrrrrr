@@ -11,6 +11,11 @@ import struct
 import plotly.graph_objects as go
 import os
 
+# ═══════════════════════════════════════════════════════════
+# 页面配置必须在第一行
+# ═══════════════════════════════════════════════════════════
+st.set_page_config(page_title="极致紧凑型专业色彩协同画布", layout="wide")
+
 # --- 全局紧凑样式注入 ---
 st.markdown("""
     <style>
@@ -29,6 +34,8 @@ st.markdown("""
     .color-table th { border-bottom: 2px solid rgba(128,128,128,0.2); padding: 8px; text-align: left; }
     .color-table td { border-bottom: 1px solid rgba(128,128,128,0.1); padding: 8px; vertical-align: middle; }
     .color-preview { width: 36px; height: 24px; border-radius: 4px; border: 1px solid rgba(128,128,128,0.3); }
+    /* 色环容器样式 */
+    .wheel-container { border-radius: 12px; padding: 8px; border: 1px solid rgba(128,128,128,0.15); }
     </style>
 """, unsafe_allow_html=True)
 
@@ -44,39 +51,217 @@ if layout_mode == "12.4寸平板模式":
     PREVIEW_WIDTH = 420
     WHEEL_SIZE = 420
     PANEL_RATIO = [1, 1]
-    st.set_page_config(layout="centered")
 else:
     PREVIEW_WIDTH = 650
     WHEEL_SIZE = 560
     PANEL_RATIO = [1.1, 1.2]
-    st.set_page_config(layout="wide")
+
+
+# ═══════════════════════════════════════════════════════════
+# Session State：色环恢复默认 + 视图模式
+# ═══════════════════════════════════════════════════════════
+if "wheel_reset_counter" not in st.session_state:
+    st.session_state.wheel_reset_counter = 0
+if "wheel_display_mode" not in st.session_state:
+    st.session_state.wheel_display_mode = "仅色相环"
+
+
+def reset_wheel_view():
+    """点击恢复默认时递增计数器，触发 Plotly uirevision 更新"""
+    st.session_state.wheel_reset_counter += 1
 
 
 # --- 核心算法引擎 ---
 @st.cache_data
 def analyze_image(img_resized, threshold=0.001, n_clusters=25):
     pixels = np.array(img_resized).reshape(-1, 3)
-    
+
     kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=8).fit(pixels)
     counts = np.bincount(kmeans.labels_)
     proportions = counts / len(kmeans.labels_)
-    
+
     mask = proportions >= threshold
     colors = kmeans.cluster_centers_[mask] / 255.0
     proportions = proportions[mask]
-    
+
     sort_idx_prop = np.argsort(proportions)[::-1]
     colors_prop = colors[sort_idx_prop]
     props_prop = proportions[sort_idx_prop]
-    
+
     focus_idx = 0
     if len(colors_prop) > 1:
         avg_dists = [np.mean([np.linalg.norm(c - other) for j, other in enumerate(colors_prop) if i != j]) for i, c in enumerate(colors_prop)]
         focus_idx = np.argmax(avg_dists)
     focus_color = colors_prop[focus_idx]
     focus_prop = props_prop[focus_idx]
-    
+
     return colors_prop, props_prop, focus_color, focus_prop
+
+
+# ═══════════════════════════════════════════════════════════
+# 色环构建函数（色相环 + 明度环）
+# ═══════════════════════════════════════════════════════════
+def build_hue_wheel(colors_prop, props_prop, dominant_color, focus_main, wheel_size, uirev):
+    """构建色相环（HSV 中 H-S 平面，V=1）"""
+    fig = go.Figure()
+
+    rs = np.linspace(0.05, 1.0, 25) 
+    thetas = np.linspace(0, 360, 180, endpoint=False) 
+    bg_theta, bg_r, bg_color = [], [], []
+    for r in rs:
+        for t in thetas:
+            bg_theta.append(t)
+            bg_r.append(r)
+            bg_color.append(mcolors.to_hex(colorsys.hsv_to_rgb(t/360.0, r, 1.0)))
+
+    fig.add_trace(go.Scatterpolar(
+        r=bg_r, theta=bg_theta, mode='markers',
+        marker=dict(size=10, color=bg_color, opacity=1.0),
+        hoverinfo='skip', showlegend=False
+    ))
+
+    pts_theta, pts_r, pts_color, pts_hover = [], [], [], []
+    for c in colors_prop:
+        h, s, v = colorsys.rgb_to_hsv(*c)
+        pts_theta.append(h * 360.0)
+        pts_r.append(s)
+        pts_color.append(mcolors.to_hex(c))
+
+        c_diff = np.linalg.norm(c - dominant_color)
+        similarity = max(0.0, 100.0 - (c_diff * 50.0))
+
+        hover_text = (
+            f"<b>十六进制:</b> {mcolors.to_hex(c).upper()}<br>"
+            f"<b>RGB 权重:</b> {[int(x*255) for x in c]}<br>"
+            f"<b>主色对比相似度:</b> {similarity:.1f}%"
+        )
+        pts_hover.append(hover_text)
+
+    fig.add_trace(go.Scatterpolar(
+        r=pts_r, theta=pts_theta, mode='markers',
+        marker=dict(
+            size=18, color=pts_color, line=dict(color='#ffffff', width=3)
+        ),
+        customdata=pts_color,  
+        text=pts_hover, hovertemplate="%{text}<extra></extra>",
+        hoverlabel=dict(bgcolor="whitesmoke", font_size=11),
+        showlegend=False
+    ))
+
+    fig.update_traces(selector=dict(mode='markers'), unselected=dict(marker_opacity=0.9))
+
+    # 聚焦主色区域：放大到主色附近
+    if focus_main and len(pts_theta) > 0:
+        h_dom, s_dom, _ = colorsys.rgb_to_hsv(*dominant_color)
+        ang = h_dom * 360.0
+        fig.update_layout(
+            polar=dict(
+                angularaxis=dict(rotation=90 - ang, direction="clockwise",
+                                 showticklabels=False, ticks='', showgrid=False),
+                radialaxis=dict(range=[0, 1.0], showticklabels=False, ticks='', showgrid=False)
+            ),
+            uirevision=uirev
+        )
+    else:
+        fig.update_layout(
+            polar=dict(
+                angularaxis=dict(showticklabels=False, ticks='', showgrid=False),
+                radialaxis=dict(showticklabels=False, ticks='', showgrid=False)
+            ),
+            uirevision=uirev
+        )
+
+    fig.update_layout(
+        width=wheel_size, height=wheel_size, margin=dict(l=10, r=10, t=10, b=10),
+        hovermode='closest'
+    )
+    return fig
+
+
+def build_value_wheel(colors_prop, props_prop, dominant_color, focus_main, wheel_size, uirev):
+    """构建明度环（HSV 中 V-S 平面，H=主色色相）"""
+    fig = go.Figure()
+
+    # 使用主色色相作为固定角度基准
+    h_base, _, _ = colorsys.rgb_to_hsv(*dominant_color)
+    h_deg = h_base * 360.0
+
+    # 背景：固定色相下的 S-V 平面
+    vs = np.linspace(0.05, 1.0, 25)
+    ss = np.linspace(0, 1.0, 180)
+    bg_theta, bg_r, bg_color = [], [], []
+    for v in vs:
+        for s in ss:
+            # 角度映射：饱和度 -> 角度，明度 -> 半径
+            bg_theta.append(s * 360.0)
+            bg_r.append(v)
+            bg_color.append(mcolors.to_hex(colorsys.hsv_to_rgb(h_base, s, v)))
+
+    fig.add_trace(go.Scatterpolar(
+        r=bg_r, theta=bg_theta, mode='markers',
+        marker=dict(size=10, color=bg_color, opacity=1.0),
+        hoverinfo='skip', showlegend=False
+    ))
+
+    pts_theta, pts_r, pts_color, pts_hover = [], [], [], []
+    for c, p in zip(colors_prop, props_prop):
+        h, s, v = colorsys.rgb_to_hsv(*c)
+        # 在明度环中，角度=饱和度，半径=明度
+        pts_theta.append(s * 360.0)
+        pts_r.append(v)
+        pts_color.append(mcolors.to_hex(c))
+
+        c_diff = np.linalg.norm(c - dominant_color)
+        similarity = max(0.0, 100.0 - (c_diff * 50.0))
+
+        hover_text = (
+            f"<b>十六进制:</b> {mcolors.to_hex(c).upper()}<br>"
+            f"<b>RGB 权重:</b> {[int(x*255) for x in c]}<br>"
+            f"<b>画面占比:</b> {p*100:.2f}%<br>"
+            f"<b>主色对比相似度:</b> {similarity:.1f}%"
+        )
+        pts_hover.append(hover_text)
+
+    fig.add_trace(go.Scatterpolar(
+        r=pts_r, theta=pts_theta, mode='markers',
+        marker=dict(
+            size=18, color=pts_color, line=dict(color='#ffffff', width=3)
+        ),
+        customdata=pts_color,
+        text=pts_hover, hovertemplate="%{text}<extra></extra>",
+        hoverlabel=dict(bgcolor="whitesmoke", font_size=11),
+        showlegend=False
+    ))
+
+    fig.update_traces(selector=dict(mode='markers'), unselected=dict(marker_opacity=0.9))
+
+    if focus_main and len(pts_theta) > 0:
+        # 聚焦到主色附近区域
+        _, s_dom, v_dom = colorsys.rgb_to_hsv(*dominant_color)
+        ang = s_dom * 360.0
+        fig.update_layout(
+            polar=dict(
+                angularaxis=dict(rotation=90 - ang, direction="clockwise",
+                                 showticklabels=False, ticks='', showgrid=False),
+                radialaxis=dict(range=[0, 1.0], showticklabels=False, ticks='', showgrid=False)
+            ),
+            uirevision=uirev
+        )
+    else:
+        fig.update_layout(
+            polar=dict(
+                angularaxis=dict(showticklabels=False, ticks='', showgrid=False),
+                radialaxis=dict(showticklabels=False, ticks='', showgrid=False)
+            ),
+            uirevision=uirev
+        )
+
+    fig.update_layout(
+        width=wheel_size, height=wheel_size, margin=dict(l=10, r=10, t=10, b=10),
+        hovermode='closest'
+    )
+    return fig
+
 
 # --- UI 渲染界面 ---
 st.title("🎨 极致紧凑型专业色彩协同画布")
@@ -85,15 +270,15 @@ uploaded_file = st.file_uploader("导入设计资产 (JPG / PNG)...", type=["jpg
 
 if uploaded_file is not None:
     img = Image.open(uploaded_file).convert('RGB')
-    img_resized = img.resize((80, 80)) # 缩小以加速缓存分析
-    
+    img_resized = img.resize((80, 80))  # 缩小以加速缓存分析
+
     default_img_name = os.path.splitext(uploaded_file.name)[0]
-    
+
     # 1. 置顶紧凑控制面板
     st.sidebar.markdown("### ⚙️ 调控中心")
-    
+
     palette_name = st.sidebar.text_input("📝 色板组名称 (默认使用图片名，支持修改)", value=default_img_name)
-    
+
     c_ctrl1, c_ctrl2 = st.sidebar.columns(2)
     c_ctrl3, c_ctrl4 = st.sidebar.columns(2)
     with c_ctrl1:
@@ -108,13 +293,28 @@ if uploaded_file is not None:
     st.sidebar.markdown("### ⭕ 色环视图")
     focus_main = st.sidebar.checkbox("聚焦主色区域", value=False)
 
+    # ═══════════════════════════════════════════════════════════
+    # 【新增】色环显示模式选择：色相环 / 明度环 / 并列
+    # ═══════════════════════════════════════════════════════════
+    wheel_display_mode = st.sidebar.radio(
+        "色环展示模式",
+        ["仅色相环", "仅明度环", "色相+明度并列"],
+        index=0,
+        key="wheel_display_mode"
+    )
+
+    # ═══════════════════════════════════════════════════════════
+    # 【修复】恢复默认按钮：通过 session state 触发 uirevision 更新
+    # ═══════════════════════════════════════════════════════════
+    if st.sidebar.button("🔄 恢复默认视图", use_container_width=True, on_click=reset_wheel_view):
+        pass  # on_click 回调已处理计数器递增
+
     colors_prop, props_prop, focus_color, focus_prop = analyze_image(img_resized, threshold=threshold, n_clusters=clusters)
     dominant_color = colors_prop[0]  
-    
+
     st.divider()
-    
+
     # 2. 核心并排联动层：原图 VS 交互色环
-    # 【需求4更新】：电脑模式下原图移至侧边栏，主体区域留白给色环
     if layout_mode == "15.6寸电脑模式":
         with st.sidebar:
             st.divider()
@@ -128,84 +328,58 @@ if uploaded_file is not None:
             st.subheader("🖼️ 原图预览")
             st.image(img, use_container_width=False, width=PREVIEW_WIDTH)
             st.metric("有效提取色板总数", len(colors_prop))
-        
+
     with col_wheel:
-        cw_1, cw_2 = st.columns([4, 1])
-        with cw_1:
-            st.subheader("⭕ 交互式光谱色环")
-        with cw_2:
-            # 【需求3更新】：添加一键恢复默认视图按钮，触发重绘重置视角
-            if st.button("🔄 恢复默认", use_container_width=True):
-                pass 
-                
-        fig_json = go.Figure()
-        
-        rs = np.linspace(0.05, 1.0, 25) 
-        thetas = np.linspace(0, 360, 180, endpoint=False) 
-        bg_theta, bg_r, bg_color = [], [], []
-        for r in rs:
-            for t in thetas:
-                bg_theta.append(t)
-                bg_r.append(r)
-                bg_color.append(mcolors.to_hex(colorsys.hsv_to_rgb(t/360.0, r, 1.0)))
-                
-        fig_json.add_trace(go.Scatterpolar(
-            r=bg_r, theta=bg_theta, mode='markers',
-            marker=dict(size=10, color=bg_color, opacity=1.0),
-            hoverinfo='skip', showlegend=False
-        ))
-        
-        pts_theta, pts_r, pts_color, pts_hover = [], [], [], []
-        for c in colors_prop:
-            h, s, v = colorsys.rgb_to_hsv(*c)
-            pts_theta.append(h * 360.0)
-            pts_r.append(s)
-            pts_color.append(mcolors.to_hex(c))
-            
-            c_diff = np.linalg.norm(c - dominant_color)
-            similarity = max(0.0, 100.0 - (c_diff * 50.0))
-            
-            hover_text = (
-                f"<b>十六进制:</b> {mcolors.to_hex(c).upper()}<br>"
-                f"<b>RGB 权重:</b> {[int(x*255) for x in c]}<br>"
-                f"<b>主色对比相似度:</b> {similarity:.1f}%"
-            )
-            pts_hover.append(hover_text)
-            
-        fig_json.add_trace(go.Scatterpolar(
-            r=pts_r, theta=pts_theta, mode='markers',
-            marker=dict(
-                size=18, color=pts_color, line=dict(color='#ffffff', width=3)
-            ),
-            customdata=pts_color,  
-            text=pts_hover, hovertemplate="%{text}<extra></extra>",
-            hoverlabel=dict(bgcolor="whitesmoke", font_size=11),
-            showlegend=False
-        ))
-        
-        fig_json.update_traces(selector=dict(mode='markers'), unselected=dict(marker_opacity=0.9))
-        fig_json.update_layout(
-            width=WHEEL_SIZE, height=WHEEL_SIZE, margin=dict(l=10, r=10, t=10, b=10),
-            polar=dict(
-                angularaxis=dict(showticklabels=False, ticks='', showgrid=False),
-                radialaxis=dict(showticklabels=False, ticks='', showgrid=False)
-            ),
-            hovermode='closest'
-        )
-        st.plotly_chart(fig_json, config={'displayModeBar': False})
+        # 根据显示模式渲染色环
+        uirev = str(st.session_state.wheel_reset_counter)  # uirevision 变化时 Plotly 重置视图
+
+        if wheel_display_mode == "仅色相环":
+            cw_1, cw_2 = st.columns([4, 1])
+            with cw_1:
+                st.subheader("⭕ 交互式光谱色相环")
+            with cw_2:
+                st.caption(f"<div style='text-align:right;color:#888;'>重置 #{st.session_state.wheel_reset_counter}</div>", unsafe_allow_html=True)
+
+            fig_hue = build_hue_wheel(colors_prop, props_prop, dominant_color, focus_main, WHEEL_SIZE, uirev)
+            st.plotly_chart(fig_hue, config={'displayModeBar': False}, use_container_width=False, key="hue_wheel_single")
+
+        elif wheel_display_mode == "仅明度环":
+            cw_1, cw_2 = st.columns([4, 1])
+            with cw_1:
+                st.subheader("🔆 交互式明度环 (S-V 平面)")
+            with cw_2:
+                st.caption(f"<div style='text-align:right;color:#888;'>重置 #{st.session_state.wheel_reset_counter}</div>", unsafe_allow_html=True)
+
+            fig_val = build_value_wheel(colors_prop, props_prop, dominant_color, focus_main, WHEEL_SIZE, uirev)
+            st.plotly_chart(fig_val, config={'displayModeBar': False}, use_container_width=False, key="val_wheel_single")
+
+        else:  # 色相+明度并列
+            cw_1, cw_2 = st.columns([4, 1])
+            with cw_1:
+                st.subheader("⭕ 交互式双环并列")
+            with cw_2:
+                st.caption(f"<div style='text-align:right;color:#888;'>重置 #{st.session_state.wheel_reset_counter}</div>", unsafe_allow_html=True)
+
+            col_h, col_v = st.columns(2)
+            with col_h:
+                st.markdown("<div style='text-align:center;font-weight:600;margin-bottom:4px;'>🎨 色相环 (H-S)</div>", unsafe_allow_html=True)
+                fig_hue = build_hue_wheel(colors_prop, props_prop, dominant_color, focus_main, WHEEL_SIZE, uirev)
+                st.plotly_chart(fig_hue, config={'displayModeBar': False}, use_container_width=False, key="hue_wheel_dual")
+            with col_v:
+                st.markdown("<div style='text-align:center;font-weight:600;margin-bottom:4px;'>🔆 明度环 (S-V)</div>", unsafe_allow_html=True)
+                fig_val = build_value_wheel(colors_prop, props_prop, dominant_color, focus_main, WHEEL_SIZE, uirev)
+                st.plotly_chart(fig_val, config={'displayModeBar': False}, use_container_width=False, key="val_wheel_dual")
 
     st.divider()
 
     # 3. 垂直同列线性分析面板
     cv_1, cv_2 = st.columns([3, 2])
     with cv_1: st.subheader("📊 垂直演化色级面板")
-    # 【需求5更新】：增加四卡同屏显示的全局开关
     with cv_2: view_mode = st.radio("色卡显示模式", ["🗂️ 标签页隔离显示", "📜 四排同屏全览"], horizontal=True, label_visibility="collapsed")
-    
-    # 【需求1更新】：使用严格的绘图生成器，切除所有外边距 (margin)，确保离散色卡和连续渐变 (imshow) 像素级等宽对齐
+
     def create_aligned_axis():
         fig, ax = plt.subplots(figsize=(11, 0.5))
-        fig.subplots_adjust(left=0, right=1, top=1, bottom=0) # 剔除留白
+        fig.subplots_adjust(left=0, right=1, top=1, bottom=0)
         ax.axis('off')
         ax.set_xlim(0, 1)
         ax.set_ylim(-0.5, 0.5)
@@ -216,23 +390,23 @@ if uploaded_file is not None:
     for c, p in zip(colors_prop, props_prop):
         ax_m1.barh(0, p, left=start, color=c, height=1)
         start += p
-    
+
     lums = np.array([0.299*c[0] + 0.587*c[1] + 0.114*c[2] for c in colors_prop])
     idx_lum_asc = np.argsort(lums)
     colors_lum = colors_prop[idx_lum_asc]
     props_lum = props_prop[idx_lum_asc]
-    
+
     fig_m2, ax_m2 = create_aligned_axis()
     start_lum = 0
     for c, p in zip(colors_lum, props_lum):
         ax_m2.barh(0, p, left=start_lum, color=c, height=1)
         start_lum += p
-    
+
     fig_m3, ax_m3 = create_aligned_axis()
     n_total = len(colors_lum)
     for i, c in enumerate(colors_lum):
         ax_m3.barh(0, 1/n_total, left=i/n_total, color=c, height=1)
-    
+
     fig_m4, ax_m4 = create_aligned_axis()
     if exclude_focus and focus_prop < 0.05 and len(colors_lum) > 2:
         colors_for_grad = [c for c in colors_lum if not np.array_equal(c, focus_color)]
@@ -241,7 +415,6 @@ if uploaded_file is not None:
     cmap_custom = mcolors.LinearSegmentedColormap.from_list("custom_lum", colors_for_grad)
     ax_m4.imshow(np.linspace(0, 1, 1024).reshape(1, -1), aspect='auto', cmap=cmap_custom, extent=[0, 1, -0.5, 0.5])
 
-    # 渲染色卡层
     if view_mode == "🗂️ 标签页隔离显示":
         tab1, tab2, tab3, tab4 = st.tabs(["覆盖率色卡", "明度加权", "等宽色卡", "连续渐变"])
         with tab1:
@@ -265,11 +438,10 @@ if uploaded_file is not None:
         st.pyplot(fig_m3)
         st.markdown("**4. 平滑明度平衡连续渐变条**")
         st.pyplot(fig_m4)
-    
+
     st.divider()
     st.subheader("🎯 色板数据总览")
 
-    # 【需求2更新】：重构数据表格，通过 HTML+CSS 原生注入色块预览，彻底替代默认 Dataframe 的生硬感
     table_html = """
     <table class="color-table">
         <tr><th>颜色预览</th><th>HEX 编码</th><th>RGB 通道</th><th>画面占比</th></tr>
@@ -279,7 +451,7 @@ if uploaded_file is not None:
         rgb_str = f"{int(c[0]*255)}, {int(c[1]*255)}, {int(c[2]*255)}"
         table_html += f"<tr><td><div class='color-preview' style='background-color: {hex_code};'></div></td><td><code>{hex_code}</code></td><td><code>{rgb_str}</code></td><td>{p*100:.2f}%</td></tr>"
     table_html += "</table>"
-    
+
     st.markdown(table_html, unsafe_allow_html=True)
 
     st.divider()
@@ -287,7 +459,7 @@ if uploaded_file is not None:
     # --- 4. 数据资产输出 ---
     st.subheader("💾 工业资产导出")
     col_d1, col_d2 = st.columns(2)
-    
+
     structured_json = {
         "palette_group": palette_name,
         "colors": []
@@ -301,34 +473,34 @@ if uploaded_file is not None:
             "rgb": [int(x*255) for x in c],
             "proportion": float(p)
         })
-    
+
     col_d1.download_button(
         "📥 导出生产环境 JSON", 
         json.dumps(structured_json, indent=2, ensure_ascii=False), 
         f"{palette_name}_palette.json" 
     )
-    
+
     if gen_aco:
         buf = io.BytesIO()
         n_colors = len(colors_prop)
-        
+
         buf.write(struct.pack('>HH', 1, n_colors))
         for c in colors_prop:
             r, g, b = [int(x*65535) for x in c]
             buf.write(struct.pack('>HHHHH', 0, r, g, b, 0))
-            
+
         buf.write(struct.pack('>HH', 2, n_colors))
         for c, p in zip(colors_prop, props_prop):
             r, g, b = [int(x*65535) for x in c]
             buf.write(struct.pack('>HHHHH', 0, r, g, b, 0))
-            
+
             hex_code = mcolors.to_hex(c).upper()
             color_name = f"{hex_code} ({p*100:.1f}%)"
             name_bytes = color_name.encode('utf-16-be') + b'\x00\x00'
-            
+
             buf.write(struct.pack('>I', len(color_name) + 1))
             buf.write(name_bytes)
-            
+
         col_d2.download_button(
             "📥 导出 Photoshop (.aco) 色板", 
             buf.getvalue(), 
