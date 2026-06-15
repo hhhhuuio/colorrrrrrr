@@ -190,7 +190,11 @@ def build_value_wheel(colors_prop, props_prop, dominant_color, focus_main, wheel
             s = theta_mid / 360.0
             thetas.append(theta_mid)
             rs.append(dr)
-            bar_colors.append(mcolors.to_hex(colorsys.hsv_to_rgb(h_base, s, v)))
+            r, g, b = colorsys.hsv_to_rgb(h_base, s, v)
+            r = max(0.0, min(1.0, r))
+            g = max(0.0, min(1.0, g))
+            b = max(0.0, min(1.0, b))
+            bar_colors.append(mcolors.to_hex((r, g, b)))
             widths.append(dtheta)
         fig.add_trace(go.Barpolar(
             r=rs, theta=thetas, width=widths, base=r_inner,
