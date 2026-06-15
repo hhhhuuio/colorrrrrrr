@@ -202,11 +202,25 @@ def build_hue_wheel(colors_prop, props_prop, dominant_color, focus_main, wheel_s
         )
         pts_hover.append(hover_text)
 
+    # 为 hover 添加色块预览（使用 Unicode 方块）
+    pts_hover_enhanced = []
+    for c, p, color_hex in zip(colors_prop, props_prop, pts_color):
+        hex_val = mcolors.to_hex(c).upper()
+        rgb_val = [int(x*255) for x in c]
+        swatch = "█" * 6
+        hover_text = (
+            f"<span style='font-size:18px;'>{swatch}</span><br>"
+            f"<b>{hex_val}</b><br>"
+            f"RGB: {rgb_val}<br>"
+            f"占比: {p*100:.2f}%"
+        )
+        pts_hover_enhanced.append(hover_text)
+
     fig.add_trace(go.Scatterpolar(
         r=pts_r, theta=pts_theta, mode='markers',
         marker=dict(size=dot_size, color=pts_color, line=dict(color='#ffffff', width=2)),
-        customdata=pts_color, text=pts_hover, hovertemplate="%{text}<extra></extra>",
-        hoverlabel=dict(bgcolor="whitesmoke", font_size=10),
+        text=pts_hover_enhanced, hovertemplate="%{text}<extra></extra>",
+        hoverlabel=dict(bgcolor="white", font_size=11, bordercolor="rgba(0,0,0,0.2)"),
         showlegend=False
     ))
 
@@ -287,11 +301,25 @@ def build_value_wheel(colors_prop, props_prop, dominant_color, focus_main, wheel
         )
         pts_hover.append(hover_text)
 
+    # 为 hover 添加色块预览（使用 Unicode 方块）
+    pts_hover_enhanced = []
+    for c, p, color_hex in zip(colors_prop, props_prop, pts_color):
+        hex_val = mcolors.to_hex(c).upper()
+        rgb_val = [int(x*255) for x in c]
+        swatch = "█" * 6
+        hover_text = (
+            f"<span style='font-size:18px;'>{swatch}</span><br>"
+            f"<b>{hex_val}</b><br>"
+            f"RGB: {rgb_val}<br>"
+            f"占比: {p*100:.2f}%"
+        )
+        pts_hover_enhanced.append(hover_text)
+
     fig.add_trace(go.Scatterpolar(
         r=pts_r, theta=pts_theta, mode='markers',
         marker=dict(size=dot_size, color=pts_color, line=dict(color='#ffffff', width=2)),
-        customdata=pts_color, text=pts_hover, hovertemplate="%{text}<extra></extra>",
-        hoverlabel=dict(bgcolor="whitesmoke", font_size=10),
+        text=pts_hover_enhanced, hovertemplate="%{text}<extra></extra>",
+        hoverlabel=dict(bgcolor="white", font_size=11, bordercolor="rgba(0,0,0,0.2)"),
         showlegend=False
     ))
 
@@ -412,7 +440,7 @@ if uploaded_file is not None:
     # 色卡面板
     # ═══════════════════════════════════════════════════════════
     cv_1, cv_2 = st.columns([3, 2])
-    with cv_1: st.subheader("演化色级面板")
+    with cv_1: st.markdown("<h3 style='margin:0;padding:0;font-size:1.1rem;'>色级面板</h3>", unsafe_allow_html=True)
     with cv_2: view_mode = st.radio("显示模式", ["标签页", "全览"], horizontal=True, label_visibility="collapsed")
 
     def build_color_bar(colors, props, title, key):
@@ -433,7 +461,7 @@ if uploaded_file is not None:
             ))
             start += p
         fig.update_layout(
-            barmode='stack', height=60, margin=dict(l=0, r=0, t=0, b=0),
+            barmode='stack', height=28, margin=dict(l=0, r=0, t=0, b=0),
             xaxis=dict(showgrid=False, showticklabels=False, zeroline=False, range=[0, 1]),
             yaxis=dict(showgrid=False, showticklabels=False, zeroline=False),
             plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
@@ -457,7 +485,7 @@ if uploaded_file is not None:
                 showlegend=False
             ))
         fig.update_layout(
-            barmode='stack', height=60, margin=dict(l=0, r=0, t=0, b=0),
+            barmode='stack', height=28, margin=dict(l=0, r=0, t=0, b=0),
             xaxis=dict(showgrid=False, showticklabels=False, zeroline=False, range=[0, 1]),
             yaxis=dict(showgrid=False, showticklabels=False, zeroline=False),
             plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
@@ -472,32 +500,40 @@ if uploaded_file is not None:
         else:
             colors_for_grad = colors
 
-        # 创建连续渐变色带
-        n_pixels = 512
-        gradient = np.zeros((1, n_pixels, 3))
-        for i in range(n_pixels):
-            t = i / (n_pixels - 1)
-            idx = int(t * (len(colors_for_grad) - 1))
-            idx = min(idx, len(colors_for_grad) - 1)
-            next_idx = min(idx + 1, len(colors_for_grad) - 1)
-            local_t = t * (len(colors_for_grad) - 1) - idx
-            c = colors_for_grad[idx] * (1 - local_t) + colors_for_grad[next_idx] * local_t
-            gradient[0, i] = c
+        n = len(colors_for_grad)
+        n_segments = 256
 
-        fig.add_trace(go.Image(
-            z=gradient,
-            hovertemplate=(
-                f"<b>连续渐变</b><br>"
-                f"基于 {len(colors_for_grad)} 种颜色<br>"
-                f"<extra></extra>"
-            )
+        for i in range(n_segments):
+            t = i / n_segments
+            idx = int(t * (n - 1))
+            idx = min(idx, n - 1)
+            next_idx = min(idx + 1, n - 1)
+            local_t = t * (n - 1) - idx
+            c = colors_for_grad[idx] * (1 - local_t) + colors_for_grad[next_idx] * local_t
+            r = max(0, min(1, c[0]))
+            g = max(0, min(1, c[1]))
+            b = max(0, min(1, c[2]))
+            hex_val = mcolors.to_hex((r, g, b))
+            fig.add_trace(go.Bar(
+                x=[1/n_segments], y=[0], base=[i/n_segments], orientation='h',
+                marker=dict(color=hex_val, line=dict(width=0)),
+                hoverinfo='skip', showlegend=False
+            ))
+
+        # 添加一个透明的 hover 点
+        fig.add_trace(go.Scatter(
+            x=[0.5], y=[0], mode='markers',
+            marker=dict(size=0, opacity=0),
+            hovertemplate=f"<b>连续渐变</b><br>基于 {n} 种颜色<extra></extra>",
+            showlegend=False
         ))
 
         fig.update_layout(
-            height=60, margin=dict(l=0, r=0, t=0, b=0),
-            xaxis=dict(showgrid=False, showticklabels=False, zeroline=False),
-            yaxis=dict(showgrid=False, showticklabels=False, zeroline=False, scaleanchor='x', scaleratio=0.1),
-            plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)'
+            barmode='stack', height=28, margin=dict(l=0, r=0, t=0, b=0),
+            xaxis=dict(showgrid=False, showticklabels=False, zeroline=False, range=[0, 1], fixedrange=True),
+            yaxis=dict(showgrid=False, showticklabels=False, zeroline=False, fixedrange=True),
+            plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
+            hovermode='closest'
         )
         return fig
 
@@ -511,29 +547,23 @@ if uploaded_file is not None:
     fig_m3 = build_equal_bar(colors_lum, "等宽", "m3")
     fig_m4 = build_gradient_bar(colors_lum, "渐变", "m4")
 
+    labels = ["覆盖率", "明度加权", "等宽离散", "连续渐变"]
+    figs = [fig_m1, fig_m2, fig_m3, fig_m4]
+    keys_tab = ["m1_tab", "m2_tab", "m3_tab", "m4_tab"]
+    keys_full = ["m1_full", "m2_full", "m3_full", "m4_full"]
+
     if view_mode == "标签页":
-        tab1, tab2, tab3, tab4 = st.tabs(["覆盖率色卡", "明度加权", "等宽色卡", "连续渐变"])
-        with tab1:
-            st.markdown("**1. 覆盖率原始分配 (按占比由大到小)**")
-            st.plotly_chart(fig_m1, config={"displayModeBar": False}, use_container_width=True, key="m1_tab")
-        with tab2:
-            st.markdown("**2. 加权明度梯度 (保留面积占比 → 依明度由暗至亮)**")
-            st.plotly_chart(fig_m2, config={"displayModeBar": False}, use_container_width=True, key="m2_tab")
-        with tab3:
-            st.markdown("**3. 标准明度等宽离散 (由暗至亮)**")
-            st.plotly_chart(fig_m3, config={"displayModeBar": False}, use_container_width=True, key="m3_tab")
-        with tab4:
-            st.markdown("**4. 平滑明度平衡连续渐变**")
-            st.plotly_chart(fig_m4, config={"displayModeBar": False}, use_container_width=True, key="m4_tab")
+        tab1, tab2, tab3, tab4 = st.tabs(labels)
+        for tab, fig, k in zip([tab1, tab2, tab3, tab4], figs, keys_tab):
+            with tab:
+                st.plotly_chart(fig, config={"displayModeBar": False}, use_container_width=True, key=k)
     else:
-        st.markdown("**1. 覆盖率原始分配**")
-        st.plotly_chart(fig_m1, config={"displayModeBar": False}, use_container_width=True, key="m1_full")
-        st.markdown("**2. 加权明度梯度**")
-        st.plotly_chart(fig_m2, config={"displayModeBar": False}, use_container_width=True, key="m2_full")
-        st.markdown("**3. 标准明度等宽离散**")
-        st.plotly_chart(fig_m3, config={"displayModeBar": False}, use_container_width=True, key="m3_full")
-        st.markdown("**4. 平滑明度平衡连续渐变**")
-        st.plotly_chart(fig_m4, config={"displayModeBar": False}, use_container_width=True, key="m4_full")
+        for label, fig, k in zip(labels, figs, keys_full):
+            c_l, c_r = st.columns([1, 20])
+            with c_l:
+                st.markdown(f"<div style='font-size:0.7rem;color:#888;white-space:nowrap;padding-top:4px;'>{label}</div>", unsafe_allow_html=True)
+            with c_r:
+                st.plotly_chart(fig, config={"displayModeBar": False}, use_container_width=True, key=k)
 
     st.divider()
     st.subheader("色板数据总览")
