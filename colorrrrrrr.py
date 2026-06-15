@@ -103,11 +103,19 @@ if uploaded_file is not None:
                 bg_r.append(r)
                 bg_color.append(mcolors.to_hex(colorsys.hsv_to_rgb(t/360.0, r, 1.0)))
                 
+                # 修改这部分代码：将 customdata 移出 marker 字典
         fig_json.add_trace(go.Scatterpolar(
-            r=bg_r, theta=bg_theta, mode='markers',
-            marker=dict(size=4, color=bg_color, opacity=0.25),
-            hoverinfo='skip', showlegend=False
+            r=pts_r, theta=pts_theta, mode='markers',
+            marker=dict(
+                size=14, color=pts_color, line=dict(color='#ffffff', width=2)
+            ),
+            customdata=pts_color, # 正确位置：作为 go.Scatterpolar 的直接参数
+            text=pts_hover, 
+            hovertemplate="%{text}<extra></extra>",
+            hoverlabel=dict(bgcolor="whitesmoke", font_size=11),
+            showlegend=False
         ))
+
         
         # 动态计算并标记主色交互节点
         pts_theta, pts_r, pts_color, pts_hover = [], [], [], []
