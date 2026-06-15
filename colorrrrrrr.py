@@ -127,19 +127,9 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-
 # ═══════════════════════════════════════════════════════════
 # Session State
 # ═══════════════════════════════════════════════════════════
-if "wheel_reset_counter" not in st.session_state:
-    st.session_state.wheel_reset_counter = 0
-if "wheel_display_mode" not in st.session_state:
-    st.session_state.wheel_display_mode = "仅色相环"
-
-
-def reset_wheel_view():
-    st.session_state.wheel_reset_counter += 1
-
 
 # --- 核心算法引擎 ---
 @st.cache_data
@@ -162,12 +152,11 @@ def analyze_image(img_resized, threshold=0.001, n_clusters=25):
     focus_prop = props_prop[focus_idx]
     return colors_prop, props_prop, focus_color, focus_prop
 
-
 # ═══════════════════════════════════════════════════════════
 # 色环构建函数 — 实色填充版
 # ═══════════════════════════════════════════════════════════
 
-def build_hue_wheel(colors_prop, props_prop, dominant_color, focus_main, wheel_size, uirev, dot_size=18):
+def build_hue_wheel(colors_prop, props_prop, dominant_color, focus_main, wheel_size, dot_size=18):
     """构建实色色相环（HSV 中 H-S 平面，V=1）"""
     fig = go.Figure()
 
@@ -233,7 +222,7 @@ def build_hue_wheel(colors_prop, props_prop, dominant_color, focus_main, wheel_s
                 angularaxis=dict(rotation=90 - ang, direction="clockwise",
                                  showticklabels=False, ticks='', showgrid=False),
                 radialaxis=dict(range=[0, 1.05], showticklabels=False, ticks='', showgrid=False)
-            ), uirevision=uirev
+            )
         )
     else:
         fig.update_layout(
@@ -241,7 +230,7 @@ def build_hue_wheel(colors_prop, props_prop, dominant_color, focus_main, wheel_s
                 barmode="overlay", bargap=0,
                 angularaxis=dict(showticklabels=False, ticks='', showgrid=False),
                 radialaxis=dict(range=[0, 1.05], showticklabels=False, ticks='', showgrid=False)
-            ), uirevision=uirev
+            )
         )
 
     fig.update_layout(
@@ -250,8 +239,7 @@ def build_hue_wheel(colors_prop, props_prop, dominant_color, focus_main, wheel_s
     )
     return fig
 
-
-def build_value_wheel(colors_prop, props_prop, dominant_color, focus_main, wheel_size, uirev, dot_size=18):
+def build_value_wheel(colors_prop, props_prop, dominant_color, focus_main, wheel_size, dot_size=18):
     """构建实色明度环（HSV 中 S-V 平面，H=画面占比最多的主色色相）"""
     fig = go.Figure()
 
@@ -320,7 +308,7 @@ def build_value_wheel(colors_prop, props_prop, dominant_color, focus_main, wheel
                 angularaxis=dict(rotation=90 - ang, direction="clockwise",
                                  showticklabels=False, ticks='', showgrid=False),
                 radialaxis=dict(range=[0, 1.05], showticklabels=False, ticks='', showgrid=False)
-            ), uirevision=uirev
+            )
         )
     else:
         fig.update_layout(
@@ -328,7 +316,7 @@ def build_value_wheel(colors_prop, props_prop, dominant_color, focus_main, wheel
                 barmode="overlay", bargap=0,
                 angularaxis=dict(showticklabels=False, ticks='', showgrid=False),
                 radialaxis=dict(range=[0, 1.05], showticklabels=False, ticks='', showgrid=False)
-            ), uirevision=uirev
+            )
         )
 
     fig.update_layout(
@@ -336,7 +324,6 @@ def build_value_wheel(colors_prop, props_prop, dominant_color, focus_main, wheel
         hovermode='closest', paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)'
     )
     return fig
-
 
 # --- UI 渲染界面 ---
 st.title("色彩协同画布")
@@ -366,18 +353,22 @@ if uploaded_file is not None:
     with c4:
         gen_aco = st.checkbox("生成 .aco 文件", value=True)
 
-    st.sidebar.markdown("<hr style='margin:6px 0;'>", unsafe_allow_html=True)
-    st.sidebar.markdown("**色环视图**")
-    focus_main = st.sidebar.checkbox("聚焦主色区域", value=False)
+    focus_main = False
 
-    wheel_display_mode = st.sidebar.radio(
-        "展示模式", ["仅色相环", "仅明度环", "色相+明度并列"], index=0
-    )
+    c_hue, c_val = st.sidebar.columns(2)
+    with c_hue:
+        show_hue = st.checkbox("色相环", value=True)
+    with c_val:
+        show_val = st.checkbox("明度环", value=False)
+
+    if show_hue and show_val:
+        wheel_display_mode = "色相+明度并列"
+    elif show_val:
+        wheel_display_mode = "仅明度环"
+    else:
+        wheel_display_mode = "仅色相环"
 
     dot_size = st.sidebar.slider("色点大小", 8, 24, 14)
-
-    if st.sidebar.button("恢复默认视图", use_container_width=True, on_click=reset_wheel_view):
-        pass
 
     colors_prop, props_prop, focus_color, focus_prop = analyze_image(
         img_resized, threshold=threshold, n_clusters=clusters
@@ -393,17 +384,16 @@ if uploaded_file is not None:
     # ═══════════════════════════════════════════════════════════
     # 核心区域：色环
     # ═══════════════════════════════════════════════════════════
-    uirev = str(st.session_state.wheel_reset_counter)
     WHEEL_SIZE = 560
 
     if wheel_display_mode == "仅色相环":
         st.subheader("光谱色相环")
-        fig_hue = build_hue_wheel(colors_prop, props_prop, dominant_color, focus_main, WHEEL_SIZE, uirev, dot_size)
+        fig_hue = build_hue_wheel(colors_prop, props_prop, dominant_color, focus_main, WHEEL_SIZE, dot_size)
         st.plotly_chart(fig_hue, config={'displayModeBar': False}, use_container_width=False, key="hue_wheel")
 
     elif wheel_display_mode == "仅明度环":
         st.subheader("明度环 (S-V 平面)")
-        fig_val = build_value_wheel(colors_prop, props_prop, dominant_color, focus_main, WHEEL_SIZE, uirev, dot_size)
+        fig_val = build_value_wheel(colors_prop, props_prop, dominant_color, focus_main, WHEEL_SIZE, dot_size)
         st.plotly_chart(fig_val, config={'displayModeBar': False}, use_container_width=False, key="val_wheel")
 
     else:  # 并列
@@ -411,11 +401,11 @@ if uploaded_file is not None:
         col_h, col_v = st.columns(2)
         with col_h:
             st.markdown("<div style='text-align:center;font-weight:600;font-size:0.9rem;'>色相环 (H-S)</div>", unsafe_allow_html=True)
-            fig_hue = build_hue_wheel(colors_prop, props_prop, dominant_color, focus_main, WHEEL_SIZE, uirev, dot_size)
+            fig_hue = build_hue_wheel(colors_prop, props_prop, dominant_color, focus_main, WHEEL_SIZE, dot_size)
             st.plotly_chart(fig_hue, config={'displayModeBar': False}, use_container_width=False, key="hue_wheel_dual")
         with col_v:
             st.markdown("<div style='text-align:center;font-weight:600;font-size:0.9rem;'>明度环 (S-V)</div>", unsafe_allow_html=True)
-            fig_val = build_value_wheel(colors_prop, props_prop, dominant_color, focus_main, WHEEL_SIZE, uirev, dot_size)
+            fig_val = build_value_wheel(colors_prop, props_prop, dominant_color, focus_main, WHEEL_SIZE, dot_size)
             st.plotly_chart(fig_val, config={'displayModeBar': False}, use_container_width=False, key="val_wheel_dual")
 
     st.divider()
