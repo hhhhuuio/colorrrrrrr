@@ -10,6 +10,7 @@ import io
 import struct
 import plotly.graph_objects as go
 import os
+import math  # 用于分页计算
 
 # ═══════════════════════════════════════════════════════════
 # 页面配置
@@ -62,6 +63,66 @@ st.markdown("""
     /* 新卡片布局内部文字大小 */
     .stMarkdown div {
         font-size: 0.9rem;
+    }
+
+    /* 三列紧凑卡片额外样式 */
+    .compact-card {
+        background: rgba(128,128,128,0.03);
+        border-radius: 6px;
+        padding: 6px 8px;
+        margin-bottom: 8px;
+        transition: all 0.1s ease;
+        border: 1px solid rgba(128,128,128,0.05);
+    }
+    .compact-card:hover {
+        background: rgba(128,128,128,0.08);
+        border-color: rgba(128,128,128,0.15);
+    }
+    .color-swatch {
+        width: 28px;
+        height: 22px;
+        border-radius: 4px;
+        border: 1px solid rgba(0,0,0,0.1);
+        flex-shrink: 0;
+    }
+    .color-code {
+        font-family: monospace;
+        font-size: 0.75rem;
+        background: rgba(0,0,0,0.03);
+        padding: 1px 4px;
+        border-radius: 3px;
+        display: inline-block;
+    }
+    .color-percent {
+        font-weight: 600;
+        font-size: 0.8rem;
+        color: #1f1f1f;
+        white-space: nowrap;
+    }
+    .color-meta {
+        font-size: 0.7rem;
+        color: #888;
+        margin-top: 4px;
+        border-top: 1px dashed rgba(128,128,128,0.2);
+        padding-top: 4px;
+        display: flex;
+        justify-content: space-between;
+    }
+    .compact-card .flex-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+    .compact-card .right-group {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    @media (max-width: 900px) {
+        .compact-card .flex-row { gap: 6px; }
+        .color-code { font-size: 0.7rem; }
     }
 </style>
 """, unsafe_allow_html=True)
@@ -432,9 +493,9 @@ if uploaded_file is not None:
     st.subheader("色板数据总览")
 
     # ═══════════════════════════════════════════════════════════
-    # 色板列表 — 紧凑双列 + hover 显示比例和主色对比
+    # 色板列表 — 三列紧凑卡片式（已优化间距和信息密度）
     # ═══════════════════════════════════════════════════════════
-        # 准备颜色数据
+    # 准备颜色数据
     card_data = []
     for c, p in zip(colors_prop, props_prop):
         hex_code = mcolors.to_hex(c).upper()
@@ -450,43 +511,34 @@ if uploaded_file is not None:
             "color": hex_code
         })
 
-    half = (len(card_data) + 1) // 2
-    left_data = card_data[:half]
-    right_data = card_data[half:]
+    # 三列分块
+    chunk_size = math.ceil(len(card_data) / 3)
+    chunks = [card_data[i:i+chunk_size] for i in range(0, len(card_data), chunk_size)]
+    # 保证三列
+    while len(chunks) < 3:
+        chunks.append([])
+    cols = st.columns(3)
 
-    col_left, col_right = st.columns(2)
-    with col_left:
-        for item in left_data:
-            st.markdown(
-                f"""
-                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px; padding: 6px; border-radius: 6px; background: rgba(128,128,128,0.03);">
-                    <div style="width: 32px; height: 24px; background: {item['color']}; border-radius: 4px; border: 1px solid #ccc;"></div>
-                    <div><code>{item['hex']}</code></div>
-                    <div><code>{item['rgb']}</code></div>
-                    <div style="margin-left: auto;"><b>{item['prop']:.2f}%</b></div>
+    for col_idx, col in enumerate(cols):
+        with col:
+            for item in chunks[col_idx]:
+                # 紧凑卡片 HTML
+                st.markdown(f"""
+                <div class="compact-card">
+                    <div class="flex-row">
+                        <div class="color-swatch" style="background: {item['color']};"></div>
+                        <span class="color-code">{item['hex']}</span>
+                        <span class="color-code">rgb({item['rgb']})</span>
+                        <div class="right-group">
+                            <span class="color-percent">{item['prop']:.2f}%</span>
+                        </div>
+                    </div>
+                    <div class="color-meta">
+                        <span>相似度 {item['similarity']:.1f}%</span>
+                        <span>距离 {item['distance']:.3f}</span>
+                    </div>
                 </div>
-                <div style="font-size: 0.7rem; color: #666; margin: -6px 0 12px 42px;">
-                    相似度: {item['similarity']:.1f}% | 距离: {item['distance']:.3f}
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-    with col_right:
-        for item in right_data:
-            st.markdown(
-                f"""
-                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px; padding: 6px; border-radius: 6px; background: rgba(128,128,128,0.03);">
-                    <div style="width: 32px; height: 24px; background: {item['color']}; border-radius: 4px; border: 1px solid #ccc;"></div>
-                    <div><code>{item['hex']}</code></div>
-                    <div><code>{item['rgb']}</code></div>
-                    <div style="margin-left: auto;"><b>{item['prop']:.2f}%</b></div>
-                </div>
-                <div style="font-size: 0.7rem; color: #666; margin: -6px 0 12px 42px;">
-                    相似度: {item['similarity']:.1f}% | 距离: {item['distance']:.3f}
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
+                """, unsafe_allow_html=True)
 
     st.divider()
 
