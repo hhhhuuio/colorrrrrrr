@@ -235,7 +235,7 @@ if uploaded_file is not None:
         })
     st.dataframe(table_data, use_container_width=True)
 
-st.divider()
+    st.divider()
 
     # --- 4. 数据资产输出 (全新升级) ---
     st.subheader("💾 工业资产导出")
