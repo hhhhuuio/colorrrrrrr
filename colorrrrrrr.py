@@ -196,13 +196,9 @@ def build_hue_wheel(colors_prop, props_prop, dominant_color, focus_main, wheel_s
         hex_val = mcolors.to_hex(c).upper()
         rgb_val = [int(x*255) for x in c]
         hover_text = (
-            f'<div style="display:flex;align-items:center;gap:8px;">'
-            f'<div style="width:40px;height:40px;border-radius:4px;border:1px solid rgba(0,0,0,0.15);background:{hex_val};"></div>'
-            f'<div>'
-            f'<div style="font-size:12px;font-weight:600;">{hex_val}</div>'
-            f'<div style="font-size:10px;color:#666;">RGB: {rgb_val}</div>'
-            f'<div style="font-size:10px;color:#666;">占比: {p*100:.2f}%</div>'
-            f'</div></div>'
+            f"<b>{hex_val}</b><br>"
+            f"RGB: {rgb_val}<br>"
+            f"占比: {p*100:.2f}%"
         )
         pts_hover.append(hover_text)
 
@@ -285,13 +281,9 @@ def build_value_wheel(colors_prop, props_prop, dominant_color, focus_main, wheel
         hex_val = mcolors.to_hex(c).upper()
         rgb_val = [int(x*255) for x in c]
         hover_text = (
-            f'<div style="display:flex;align-items:center;gap:8px;">'
-            f'<div style="width:40px;height:40px;border-radius:4px;border:1px solid rgba(0,0,0,0.15);background:{hex_val};"></div>'
-            f'<div>'
-            f'<div style="font-size:12px;font-weight:600;">{hex_val}</div>'
-            f'<div style="font-size:10px;color:#666;">RGB: {rgb_val}</div>'
-            f'<div style="font-size:10px;color:#666;">占比: {p*100:.2f}%</div>'
-            f'</div></div>'
+            f"<b>{hex_val}</b><br>"
+            f"RGB: {rgb_val}<br>"
+            f"占比: {p*100:.2f}%"
         )
         pts_hover.append(hover_text)
 
@@ -433,13 +425,9 @@ if uploaded_file is not None:
                 x=[p], y=[0], base=[start], orientation='h',
                 marker=dict(color=hex_val, line=dict(width=0)),
                 hovertemplate=(
-                    f'<div style="display:flex;align-items:center;gap:10px;">'
-                    f'<div style="width:40px;height:40px;border-radius:4px;border:1px solid rgba(0,0,0,0.15);background:{hex_val};"></div>'
-                    f'<div>'
-                    f'<div style="font-size:13px;font-weight:600;">{hex_val}</div>'
-                    f'<div style="font-size:11px;color:#666;">RGB: {rgb_val}</div>'
-                    f'<div style="font-size:11px;color:#666;">占比: {p*100:.2f}%</div>'
-                    f'</div></div><extra></extra>'
+                    f"<b>{hex_val}</b><br>"
+                    f"RGB: {rgb_val}<br>"
+                    f"占比: {p*100:.2f}%<extra></extra>"
                 ),
                 showlegend=False
             ))
@@ -463,12 +451,8 @@ if uploaded_file is not None:
                 x=[1/n_total], y=[0], base=[i/n_total], orientation='h',
                 marker=dict(color=hex_val, line=dict(width=0)),
                 hovertemplate=(
-                    f'<div style="display:flex;align-items:center;gap:10px;">'
-                    f'<div style="width:40px;height:40px;border-radius:4px;border:1px solid rgba(0,0,0,0.15);background:{hex_val};"></div>'
-                    f'<div>'
-                    f'<div style="font-size:13px;font-weight:600;">{hex_val}</div>'
-                    f'<div style="font-size:11px;color:#666;">RGB: {rgb_val}</div>'
-                    f'</div></div><extra></extra>'
+                    f"<b>{hex_val}</b><br>"
+                    f"RGB: {rgb_val}<extra></extra>"
                 ),
                 showlegend=False
             ))
@@ -488,22 +472,31 @@ if uploaded_file is not None:
         else:
             colors_for_grad = colors
 
-        n_segments = 100
-        for i in range(n_segments):
-            t = i / n_segments
+        # 创建连续渐变色带
+        n_pixels = 512
+        gradient = np.zeros((1, n_pixels, 3))
+        for i in range(n_pixels):
+            t = i / (n_pixels - 1)
             idx = int(t * (len(colors_for_grad) - 1))
             idx = min(idx, len(colors_for_grad) - 1)
-            c = colors_for_grad[idx]
-            hex_val = mcolors.to_hex(c).upper()
-            fig.add_trace(go.Bar(
-                x=[1/n_segments], y=[0], base=[i/n_segments], orientation='h',
-                marker=dict(color=hex_val, line=dict(width=0)),
-                hoverinfo='skip', showlegend=False
-            ))
+            next_idx = min(idx + 1, len(colors_for_grad) - 1)
+            local_t = t * (len(colors_for_grad) - 1) - idx
+            c = colors_for_grad[idx] * (1 - local_t) + colors_for_grad[next_idx] * local_t
+            gradient[0, i] = c
+
+        fig.add_trace(go.Image(
+            z=gradient,
+            hovertemplate=(
+                f"<b>连续渐变</b><br>"
+                f"基于 {len(colors_for_grad)} 种颜色<br>"
+                f"<extra></extra>"
+            )
+        ))
+
         fig.update_layout(
-            barmode='stack', height=60, margin=dict(l=0, r=0, t=0, b=0),
-            xaxis=dict(showgrid=False, showticklabels=False, zeroline=False, range=[0, 1]),
-            yaxis=dict(showgrid=False, showticklabels=False, zeroline=False),
+            height=60, margin=dict(l=0, r=0, t=0, b=0),
+            xaxis=dict(showgrid=False, showticklabels=False, zeroline=False),
+            yaxis=dict(showgrid=False, showticklabels=False, zeroline=False, scaleanchor='x', scaleratio=0.1),
             plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)'
         )
         return fig
