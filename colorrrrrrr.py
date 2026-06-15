@@ -507,14 +507,14 @@ if uploaded_file is not None:
             xaxis=dict(showgrid=False, showticklabels=False, zeroline=False, range=[0, 1], fixedrange=True),
             yaxis=dict(showgrid=False, showticklabels=False, zeroline=False, fixedrange=True),
             plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
-            hovermode='x unified'
+            hovermode='closest'
         )
         return fig
 
-    def build_equal_bar(colors, title, key):
+    def build_equal_bar(colors, props, title, key):
         fig = go.Figure()
         n_total = len(colors)
-        for i, c in enumerate(colors):
+        for i, (c, p) in enumerate(zip(colors, props)):
             hex_val = mcolors.to_hex(c).upper()
             rgb_val = [int(x*255) for x in c]
             fig.add_trace(go.Bar(
@@ -522,7 +522,8 @@ if uploaded_file is not None:
                 marker=dict(color=hex_val, line=dict(width=0)),
                 hovertemplate=(
                     f"<b>{hex_val}</b><br>"
-                    f"RGB: {rgb_val}<extra></extra>"
+                    f"RGB: {rgb_val}<br>"
+                    f"占比: {p*100:.2f}%<extra></extra>"
                 ),
                 showlegend=False,
                 hoverlabel=dict(
@@ -537,7 +538,7 @@ if uploaded_file is not None:
             xaxis=dict(showgrid=False, showticklabels=False, zeroline=False, range=[0, 1], fixedrange=True),
             yaxis=dict(showgrid=False, showticklabels=False, zeroline=False, fixedrange=True),
             plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
-            hovermode='x unified'
+            hovermode='closest'
         )
         return fig
 
@@ -593,7 +594,7 @@ if uploaded_file is not None:
 
     fig_m1 = build_color_bar(colors_prop, props_prop, "覆盖率", "m1")
     fig_m2 = build_color_bar(colors_lum, props_lum, "明度加权", "m2")
-    fig_m3 = build_equal_bar(colors_lum, "等宽", "m3")
+    fig_m3 = build_equal_bar(colors_lum, props_lum, "等宽", "m3")
     fig_m4 = build_gradient_bar(colors_lum, "渐变", "m4")
 
     labels = ["覆盖率", "明度加权", "等宽离散", "连续渐变"]
