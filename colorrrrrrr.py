@@ -102,6 +102,9 @@ if uploaded_file is not None:
     with c_ctrl4:
         gen_aco = st.checkbox("准备 Adobe .aco 色板下载", value=True)
 
+    st.sidebar.markdown("### ⭕ 色环视图")
+    focus_main = st.sidebar.checkbox("聚焦主色区域", value=False)
+
     # 执行核心色彩分析
     colors_prop, props_prop, focus_color, focus_prop = analyze_image(img, threshold=threshold, n_clusters=clusters)
     dominant_color = colors_prop[0]  
@@ -109,7 +112,14 @@ if uploaded_file is not None:
     st.divider()
     
     # 2. 核心并排联动层：原图 VS 交互色环
-    col_img, col_wheel = st.columns(PANEL_RATIO)
+    if layout_mode == "15.6寸电脑模式":
+        with st.sidebar:
+            st.subheader("🖼️ 原图预览")
+            st.image(img, use_container_width=True)
+            st.metric("有效提取色板总数", len(colors_prop))
+        col_wheel, col_table = st.columns([1.2,1])
+    else:
+        col_img, col_wheel = st.columns(PANEL_RATIO)
     
     with col_img:
         st.subheader("🖼️ 原图预览")
