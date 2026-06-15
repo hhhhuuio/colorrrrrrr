@@ -416,38 +416,59 @@ if uploaded_file is not None:
     # ═══════════════════════════════════════════════════════════
     # 色板列表 — 紧凑双列 + hover 显示比例和主色对比
     # ═══════════════════════════════════════════════════════════
-    half = (len(colors_prop) + 1) // 2
-    colors_left = list(zip(colors_prop, props_prop))[:half]
-    colors_right = list(zip(colors_prop, props_prop))[half:]
+        # 准备颜色数据
+    card_data = []
+    for c, p in zip(colors_prop, props_prop):
+        hex_code = mcolors.to_hex(c).upper()
+        rgb_str = f"{int(c[0]*255)},{int(c[1]*255)},{int(c[2]*255)}"
+        c_diff = np.linalg.norm(c - dominant_color)
+        similarity = max(0.0, 100.0 - (c_diff * 50.0))
+        card_data.append({
+            "hex": hex_code,
+            "rgb": rgb_str,
+            "prop": p * 100,
+            "similarity": similarity,
+            "distance": c_diff,
+            "color": hex_code
+        })
 
-    table_html = '<div class="palette-grid">'
-    for side_data in [colors_left, colors_right]:
-        table_html += '<table class="color-table">'
-        table_html += '<tr><th>色块</th><th>HEX</th><th>RGB</th><th>占比</th></tr>'
-        for c, p in side_data:
-            hex_code = mcolors.to_hex(c).upper()
-            rgb_str = f"{int(c[0]*255)},{int(c[1]*255)},{int(c[2]*255)}"
-            c_diff = np.linalg.norm(c - dominant_color)
-            similarity = max(0.0, 100.0 - (c_diff * 50.0))
-            table_html += f"""
-            <tr class="color-row">
-                <td><div class="color-preview" style="background-color: {hex_code};"></div></td>
-                <td><code>{hex_code}</code></td>
-                <td><code>{rgb_str}</code></td>
-                <td>{p*100:.2f}%</td>
-            </tr>
-            <tr class="color-row">
-                <td colspan="4" style="padding:0 6px 4px 6px; border:none;">
-                    <div class="color-hover-info">
-                        占比: {p*100:.2f}% | 主色相似度: {similarity:.1f}% | 与主色距离: {c_diff:.3f}
-                    </div>
-                </td>
-            </tr>
-            """
-        table_html += '</table>'
-    table_html += '</div>'
+    half = (len(card_data) + 1) // 2
+    left_data = card_data[:half]
+    right_data = card_data[half:]
 
-    st.markdown(table_html, unsafe_allow_html=True)
+    col_left, col_right = st.columns(2)
+    with col_left:
+        for item in left_data:
+            st.markdown(
+                f"""
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px; padding: 6px; border-radius: 6px; background: rgba(128,128,128,0.03);">
+                    <div style="width: 32px; height: 24px; background: {item['color']}; border-radius: 4px; border: 1px solid #ccc;"></div>
+                    <div><code>{item['hex']}</code></div>
+                    <div><code>{item['rgb']}</code></div>
+                    <div style="margin-left: auto;"><b>{item['prop']:.2f}%</b></div>
+                </div>
+                <div style="font-size: 0.7rem; color: #666; margin: -6px 0 12px 42px;">
+                    相似度: {item['similarity']:.1f}% | 距离: {item['distance']:.3f}
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+    with col_right:
+        for item in right_data:
+            st.markdown(
+                f"""
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px; padding: 6px; border-radius: 6px; background: rgba(128,128,128,0.03);">
+                    <div style="width: 32px; height: 24px; background: {item['color']}; border-radius: 4px; border: 1px solid #ccc;"></div>
+                    <div><code>{item['hex']}</code></div>
+                    <div><code>{item['rgb']}</code></div>
+                    <div style="margin-left: auto;"><b>{item['prop']:.2f}%</b></div>
+                </div>
+                <div style="font-size: 0.7rem; color: #666; margin: -6px 0 12px 42px;">
+                    相似度: {item['similarity']:.1f}% | 距离: {item['distance']:.3f}
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
 
     st.divider()
 
