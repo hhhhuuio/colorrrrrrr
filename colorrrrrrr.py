@@ -193,13 +193,16 @@ def build_hue_wheel(colors_prop, props_prop, dominant_color, focus_main, wheel_s
         pts_theta.append(h * 360.0)
         pts_r.append(s)
         pts_color.append(mcolors.to_hex(c))
-        c_diff = np.linalg.norm(c - dominant_color)
-        similarity = max(0.0, 100.0 - (c_diff * 50.0))
+        hex_val = mcolors.to_hex(c).upper()
+        rgb_val = [int(x*255) for x in c]
         hover_text = (
-            f"<b>HEX:</b> {mcolors.to_hex(c).upper()}<br>"
-            f"<b>RGB:</b> {[int(x*255) for x in c]}<br>"
-            f"<b>占比:</b> {p*100:.2f}%<br>"
-            f"<b>主色相似度:</b> {similarity:.1f}%"
+            f'<div style="display:flex;align-items:center;gap:8px;">'
+            f'<div style="width:40px;height:40px;border-radius:4px;border:1px solid rgba(0,0,0,0.15);background:{hex_val};"></div>'
+            f'<div>'
+            f'<div style="font-size:12px;font-weight:600;">{hex_val}</div>'
+            f'<div style="font-size:10px;color:#666;">RGB: {rgb_val}</div>'
+            f'<div style="font-size:10px;color:#666;">占比: {p*100:.2f}%</div>'
+            f'</div></div>'
         )
         pts_hover.append(hover_text)
 
@@ -279,13 +282,16 @@ def build_value_wheel(colors_prop, props_prop, dominant_color, focus_main, wheel
         pts_theta.append(s * 360.0)
         pts_r.append(v)
         pts_color.append(mcolors.to_hex(c))
-        c_diff = np.linalg.norm(c - dominant_color)
-        similarity = max(0.0, 100.0 - (c_diff * 50.0))
+        hex_val = mcolors.to_hex(c).upper()
+        rgb_val = [int(x*255) for x in c]
         hover_text = (
-            f"<b>HEX:</b> {mcolors.to_hex(c).upper()}<br>"
-            f"<b>RGB:</b> {[int(x*255) for x in c]}<br>"
-            f"<b>占比:</b> {p*100:.2f}%<br>"
-            f"<b>主色相似度:</b> {similarity:.1f}%"
+            f'<div style="display:flex;align-items:center;gap:8px;">'
+            f'<div style="width:40px;height:40px;border-radius:4px;border:1px solid rgba(0,0,0,0.15);background:{hex_val};"></div>'
+            f'<div>'
+            f'<div style="font-size:12px;font-weight:600;">{hex_val}</div>'
+            f'<div style="font-size:10px;color:#666;">RGB: {rgb_val}</div>'
+            f'<div style="font-size:10px;color:#666;">占比: {p*100:.2f}%</div>'
+            f'</div></div>'
         )
         pts_hover.append(hover_text)
 
@@ -417,67 +423,124 @@ if uploaded_file is not None:
     with cv_1: st.subheader("演化色级面板")
     with cv_2: view_mode = st.radio("显示模式", ["标签页", "全览"], horizontal=True, label_visibility="collapsed")
 
-    def create_aligned_axis():
-        fig, ax = plt.subplots(figsize=(11, 0.5))
-        fig.subplots_adjust(left=0, right=1, top=1, bottom=0)
-        ax.axis('off')
-        ax.set_xlim(0, 1)
-        ax.set_ylim(-0.5, 0.5)
-        return fig, ax
+    def build_color_bar(colors, props, title, key):
+        fig = go.Figure()
+        start = 0
+        for c, p in zip(colors, props):
+            hex_val = mcolors.to_hex(c).upper()
+            rgb_val = [int(x*255) for x in c]
+            fig.add_trace(go.Bar(
+                x=[p], y=[0], base=[start], orientation='h',
+                marker=dict(color=hex_val, line=dict(width=0)),
+                hovertemplate=(
+                    f'<div style="display:flex;align-items:center;gap:10px;">'
+                    f'<div style="width:40px;height:40px;border-radius:4px;border:1px solid rgba(0,0,0,0.15);background:{hex_val};"></div>'
+                    f'<div>'
+                    f'<div style="font-size:13px;font-weight:600;">{hex_val}</div>'
+                    f'<div style="font-size:11px;color:#666;">RGB: {rgb_val}</div>'
+                    f'<div style="font-size:11px;color:#666;">占比: {p*100:.2f}%</div>'
+                    f'</div></div><extra></extra>'
+                ),
+                showlegend=False
+            ))
+            start += p
+        fig.update_layout(
+            barmode='stack', height=60, margin=dict(l=0, r=0, t=0, b=0),
+            xaxis=dict(showgrid=False, showticklabels=False, zeroline=False, range=[0, 1]),
+            yaxis=dict(showgrid=False, showticklabels=False, zeroline=False),
+            plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
+            hovermode='x unified'
+        )
+        return fig
 
-    fig_m1, ax_m1 = create_aligned_axis()
-    start = 0
-    for c, p in zip(colors_prop, props_prop):
-        ax_m1.barh(0, p, left=start, color=c, height=1)
-        start += p
+    def build_equal_bar(colors, title, key):
+        fig = go.Figure()
+        n_total = len(colors)
+        for i, c in enumerate(colors):
+            hex_val = mcolors.to_hex(c).upper()
+            rgb_val = [int(x*255) for x in c]
+            fig.add_trace(go.Bar(
+                x=[1/n_total], y=[0], base=[i/n_total], orientation='h',
+                marker=dict(color=hex_val, line=dict(width=0)),
+                hovertemplate=(
+                    f'<div style="display:flex;align-items:center;gap:10px;">'
+                    f'<div style="width:40px;height:40px;border-radius:4px;border:1px solid rgba(0,0,0,0.15);background:{hex_val};"></div>'
+                    f'<div>'
+                    f'<div style="font-size:13px;font-weight:600;">{hex_val}</div>'
+                    f'<div style="font-size:11px;color:#666;">RGB: {rgb_val}</div>'
+                    f'</div></div><extra></extra>'
+                ),
+                showlegend=False
+            ))
+        fig.update_layout(
+            barmode='stack', height=60, margin=dict(l=0, r=0, t=0, b=0),
+            xaxis=dict(showgrid=False, showticklabels=False, zeroline=False, range=[0, 1]),
+            yaxis=dict(showgrid=False, showticklabels=False, zeroline=False),
+            plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
+            hovermode='x unified'
+        )
+        return fig
+
+    def build_gradient_bar(colors, title, key):
+        fig = go.Figure()
+        if exclude_focus and focus_prop < 0.05 and len(colors) > 2:
+            colors_for_grad = [c for c in colors if not np.array_equal(c, focus_color)]
+        else:
+            colors_for_grad = colors
+
+        n_segments = 100
+        for i in range(n_segments):
+            t = i / n_segments
+            idx = int(t * (len(colors_for_grad) - 1))
+            idx = min(idx, len(colors_for_grad) - 1)
+            c = colors_for_grad[idx]
+            hex_val = mcolors.to_hex(c).upper()
+            fig.add_trace(go.Bar(
+                x=[1/n_segments], y=[0], base=[i/n_segments], orientation='h',
+                marker=dict(color=hex_val, line=dict(width=0)),
+                hoverinfo='skip', showlegend=False
+            ))
+        fig.update_layout(
+            barmode='stack', height=60, margin=dict(l=0, r=0, t=0, b=0),
+            xaxis=dict(showgrid=False, showticklabels=False, zeroline=False, range=[0, 1]),
+            yaxis=dict(showgrid=False, showticklabels=False, zeroline=False),
+            plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)'
+        )
+        return fig
 
     lums = np.array([0.299*c[0] + 0.587*c[1] + 0.114*c[2] for c in colors_prop])
     idx_lum_asc = np.argsort(lums)
     colors_lum = colors_prop[idx_lum_asc]
     props_lum = props_prop[idx_lum_asc]
 
-    fig_m2, ax_m2 = create_aligned_axis()
-    start_lum = 0
-    for c, p in zip(colors_lum, props_lum):
-        ax_m2.barh(0, p, left=start_lum, color=c, height=1)
-        start_lum += p
-
-    fig_m3, ax_m3 = create_aligned_axis()
-    n_total = len(colors_lum)
-    for i, c in enumerate(colors_lum):
-        ax_m3.barh(0, 1/n_total, left=i/n_total, color=c, height=1)
-
-    fig_m4, ax_m4 = create_aligned_axis()
-    if exclude_focus and focus_prop < 0.05 and len(colors_lum) > 2:
-        colors_for_grad = [c for c in colors_lum if not np.array_equal(c, focus_color)]
-    else:
-        colors_for_grad = colors_lum
-    cmap_custom = mcolors.LinearSegmentedColormap.from_list("custom_lum", colors_for_grad)
-    ax_m4.imshow(np.linspace(0, 1, 1024).reshape(1, -1), aspect='auto', cmap=cmap_custom, extent=[0, 1, -0.5, 0.5])
+    fig_m1 = build_color_bar(colors_prop, props_prop, "覆盖率", "m1")
+    fig_m2 = build_color_bar(colors_lum, props_lum, "明度加权", "m2")
+    fig_m3 = build_equal_bar(colors_lum, "等宽", "m3")
+    fig_m4 = build_gradient_bar(colors_lum, "渐变", "m4")
 
     if view_mode == "标签页":
         tab1, tab2, tab3, tab4 = st.tabs(["覆盖率色卡", "明度加权", "等宽色卡", "连续渐变"])
         with tab1:
             st.markdown("**1. 覆盖率原始分配 (按占比由大到小)**")
-            st.pyplot(fig_m1)
+            st.plotly_chart(fig_m1, config={"displayModeBar": False}, use_container_width=True, key="m1_tab")
         with tab2:
             st.markdown("**2. 加权明度梯度 (保留面积占比 → 依明度由暗至亮)**")
-            st.pyplot(fig_m2)
+            st.plotly_chart(fig_m2, config={"displayModeBar": False}, use_container_width=True, key="m2_tab")
         with tab3:
             st.markdown("**3. 标准明度等宽离散 (由暗至亮)**")
-            st.pyplot(fig_m3)
+            st.plotly_chart(fig_m3, config={"displayModeBar": False}, use_container_width=True, key="m3_tab")
         with tab4:
             st.markdown("**4. 平滑明度平衡连续渐变**")
-            st.pyplot(fig_m4)
+            st.plotly_chart(fig_m4, config={"displayModeBar": False}, use_container_width=True, key="m4_tab")
     else:
         st.markdown("**1. 覆盖率原始分配**")
-        st.pyplot(fig_m1)
+        st.plotly_chart(fig_m1, config={"displayModeBar": False}, use_container_width=True, key="m1_full")
         st.markdown("**2. 加权明度梯度**")
-        st.pyplot(fig_m2)
+        st.plotly_chart(fig_m2, config={"displayModeBar": False}, use_container_width=True, key="m2_full")
         st.markdown("**3. 标准明度等宽离散**")
-        st.pyplot(fig_m3)
+        st.plotly_chart(fig_m3, config={"displayModeBar": False}, use_container_width=True, key="m3_full")
         st.markdown("**4. 平滑明度平衡连续渐变**")
-        st.pyplot(fig_m4)
+        st.plotly_chart(fig_m4, config={"displayModeBar": False}, use_container_width=True, key="m4_full")
 
     st.divider()
     st.subheader("色板数据总览")
@@ -490,14 +553,10 @@ if uploaded_file is not None:
     for c, p in zip(colors_prop, props_prop):
         hex_code = mcolors.to_hex(c).upper()
         rgb_str = f"{int(c[0]*255)},{int(c[1]*255)},{int(c[2]*255)}"
-        c_diff = np.linalg.norm(c - dominant_color)
-        similarity = max(0.0, 100.0 - (c_diff * 50.0))
         card_data.append({
             "hex": hex_code,
             "rgb": rgb_str,
             "prop": p * 100,
-            "similarity": similarity,
-            "distance": c_diff,
             "color": hex_code
         })
 
@@ -514,7 +573,9 @@ if uploaded_file is not None:
             for item in chunks[col_idx]:
                 # 紧凑卡片 HTML
                 st.markdown(f"""
-                <div class="compact-card">
+                <div class="compact-card" style="position:relative;cursor:pointer;" 
+                     onmouseenter="this.querySelector('.color-preview-popup').style.display='flex'" 
+                     onmouseleave="this.querySelector('.color-preview-popup').style.display='none'">
                     <div class="flex-row">
                         <div class="color-swatch" style="background: {item['color']};"></div>
                         <span class="color-code">{item['hex']}</span>
@@ -523,9 +584,13 @@ if uploaded_file is not None:
                             <span class="color-percent">{item['prop']:.2f}%</span>
                         </div>
                     </div>
-                    <div class="color-meta">
-                        <span>相似度 {item['similarity']:.1f}%</span>
-                        <span>距离 {item['distance']:.3f}</span>
+                    <div class="color-preview-popup" style="display:none;position:absolute;left:50%;bottom:100%;transform:translateX(-50%);margin-bottom:8px;z-index:100;background:white;border-radius:8px;padding:12px;box-shadow:0 4px 20px rgba(0,0,0,0.15);border:1px solid rgba(0,0,0,0.08);align-items:center;gap:12px;white-space:nowrap;">
+                        <div style="width:48px;height:48px;border-radius:6px;border:1px solid rgba(0,0,0,0.1);background:{item['color']};"></div>
+                        <div>
+                            <div style="font-size:13px;font-weight:600;color:#1f1f1f;">{item['hex']}</div>
+                            <div style="font-size:11px;color:#666;">rgb({item['rgb']})</div>
+                            <div style="font-size:11px;color:#666;">占比 {item['prop']:.2f}%</div>
+                        </div>
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
