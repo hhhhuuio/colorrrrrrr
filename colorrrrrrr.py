@@ -1,5 +1,5 @@
 import streamlit as st
-import cv2
+from PIL import Image  # 替换 cv2，完美兼容云端无头环境
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
@@ -24,8 +24,9 @@ st.markdown("""
 
 # --- 核心算法引擎 ---
 def analyze_image(img_obj, threshold=0.001, n_clusters=25):
-    img_rgb = cv2.cvtColor(img_obj, cv2.COLOR_BGR2RGB)
-    pixels = cv2.resize(img_rgb, (80, 80)).reshape(-1, 3)
+    # img_obj 传入时已经是 PIL 的 RGB 图像对象，无需再手动进行 BGR2RGB 转换
+    img_resized = img_obj.resize((80, 80))
+    pixels = np.array(img_resized).reshape(-1, 3)
     
     kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=8).fit(pixels)
     counts = np.bincount(kmeans.labels_)
@@ -56,8 +57,8 @@ st.title("🎨 极致紧凑型专业色彩协同画布")
 uploaded_file = st.file_uploader("导入设计资产 (JPG / PNG)...", type=["jpg", "png", "jpeg"])
 
 if uploaded_file is not None:
-    file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
-    img = cv2.imdecode(file_bytes, 1)
+    # 采用 PIL 安全、高效地在内存中解码并统一转换为标准的 RGB 模式
+    img = Image.open(uploaded_file).convert('RGB')
     
     # 1. 置顶紧凑控制面板
     st.markdown("### ⚙️ 调控中心")
@@ -82,8 +83,8 @@ if uploaded_file is not None:
     
     with col_img:
         st.subheader("🖼️ 原图预览")
-        # 适当缩小图片展示尺寸
-        st.image(cv2.cvtColor(img, cv2.COLOR_BGR2RGB), use_container_width=False, width=380)
+        # Streamlit 原生对 PIL 对象的自适应支持极佳
+        st.image(img, use_container_width=False, width=380)
         st.metric("有效提取色板总数", len(colors_prop))
         
     with col_wheel:
@@ -188,7 +189,7 @@ if uploaded_file is not None:
     n_total = len(colors_lum)
     for i, c in enumerate(colors_lum):
         ax_m3.barh(0, 1/n_total, left=i/n_total, color=c, height=1)
-    ax_m3.axis('off')
+    fig_m3.gca().set_axis_off()
     st.pyplot(fig_m3)
     
     # Panel 4: 空间平衡连续渐变 (支持智能过滤选项)
