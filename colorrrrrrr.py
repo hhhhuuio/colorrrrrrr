@@ -366,6 +366,10 @@ if uploaded_file is not None:
     with c4:
         gen_aco = st.checkbox("生成 .aco 文件", value=True)
 
+    st.sidebar.markdown("<hr style='margin:6px 0;'>", unsafe_allow_html=True)
+    st.sidebar.markdown("**色环视图**")
+    focus_main = st.sidebar.checkbox("聚焦主色区域", value=False)
+
     wheel_display_mode = st.sidebar.radio(
         "展示模式", ["仅色相环", "仅明度环", "色相+明度并列"], index=0
     )
