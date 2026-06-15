@@ -17,7 +17,7 @@ import math  # 用于分页计算
 # ═══════════════════════════════════════════════════════════
 st.set_page_config(page_title="色彩协同画布", layout="wide")
 
-# --- 全局紧凑样式注入 ---
+# --- 全局紧凑样式注入（移除卡片悬浮预览样式，新增按钮选中样式）---
 st.markdown("""
     <style>
     /* 全局基础字号提升 */
@@ -47,36 +47,33 @@ st.markdown("""
         font-size: 0.85rem !important;
     }
     
-    /* 色板表格（若仍使用table） */
-    .color-table { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 0.9rem; }
-    .color-table th { border-bottom: 1px solid rgba(128,128,128,0.2); padding: 4px 6px; text-align: left; font-size: 0.85rem; }
-    .color-table td { border-bottom: 1px solid rgba(128,128,128,0.08); padding: 3px 6px; vertical-align: middle; }
-    .color-preview { width: 28px; height: 20px; border-radius: 3px; border: 1px solid rgba(128,128,128,0.3); }
-    .color-row { transition: background 0.15s; }
-    .color-row:hover { background: rgba(128,128,128,0.06); }
-    .color-hover-info { display: none; font-size: 0.8rem; color: #666; margin-top: 2px; }
-    .color-row:hover .color-hover-info { display: block; }
-    
-    /* 双列色板布局 */
-    .palette-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
-    
-    /* 新卡片布局内部文字大小 */
-    .stMarkdown div {
-        font-size: 0.9rem;
-    }
-
-    /* 三列紧凑卡片额外样式 */
-    .compact-card {
+    /* 新卡片按钮样式（无指针、无虚线、保持紧凑） */
+    .color-card-btn {
+        width: 100%;
         background: rgba(128,128,128,0.03);
+        border: 1px solid rgba(128,128,128,0.05);
         border-radius: 6px;
         padding: 6px 8px;
         margin-bottom: 8px;
+        text-align: left;
+        cursor: default !important;          /* 无手型指针 */
         transition: all 0.1s ease;
-        border: 1px solid rgba(128,128,128,0.05);
+        font-family: inherit;
+        font-size: 0.9rem;
     }
-    .compact-card:hover {
+    .color-card-btn:hover {
         background: rgba(128,128,128,0.08);
         border-color: rgba(128,128,128,0.15);
+    }
+    .color-card-btn:focus, .color-card-btn:active {
+        outline: none !important;             /* 无虚线轮廓 */
+        box-shadow: none !important;
+    }
+    .selected-color-card {
+        background: rgba(128,128,128,0.12);
+        border: 2px solid rgba(0,0,0,0.2);
+        transform: scale(1.02);
+        transition: all 0.2s ease;
     }
     .color-swatch {
         width: 28px;
@@ -99,39 +96,52 @@ st.markdown("""
         color: #1f1f1f;
         white-space: nowrap;
     }
-    .color-meta {
-        font-size: 0.7rem;
-        color: #888;
-        margin-top: 4px;
-        border-top: 1px dashed rgba(128,128,128,0.2);
-        padding-top: 4px;
-        display: flex;
-        justify-content: space-between;
-    }
-    .compact-card .flex-row {
+    .flex-row {
         display: flex;
         align-items: center;
         gap: 8px;
         flex-wrap: wrap;
     }
-    .compact-card .right-group {
+    .right-group {
         margin-left: auto;
         display: flex;
         align-items: center;
         gap: 8px;
     }
     @media (max-width: 900px) {
-        .compact-card .flex-row { gap: 6px; }
+        .flex-row { gap: 6px; }
         .color-code { font-size: 0.7rem; }
+    }
+    
+    /* 侧边栏选中色块预览放大样式 */
+    .selected-preview {
+        background: #ffffff;
+        border-radius: 12px;
+        padding: 12px;
+        margin-top: 16px;
+        text-align: center;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        border: 1px solid #e0e0e0;
+    }
+    .big-swatch {
+        width: 100%;
+        height: 120px;
+        border-radius: 10px;
+        margin-bottom: 10px;
+        border: 1px solid rgba(0,0,0,0.1);
     }
 </style>
 """, unsafe_allow_html=True)
 
 # ═══════════════════════════════════════════════════════════
-# Session State
+# Session State 初始化
 # ═══════════════════════════════════════════════════════════
+if "selected_color" not in st.session_state:
+    st.session_state.selected_color = None
 
-# --- 核心算法引擎 ---
+# ═══════════════════════════════════════════════════════════
+# 核心算法引擎
+# ═══════════════════════════════════════════════════════════
 @st.cache_data
 def analyze_image(img_resized, threshold=0.001, n_clusters=25):
     pixels = np.array(img_resized).reshape(-1, 3)
@@ -153,13 +163,10 @@ def analyze_image(img_resized, threshold=0.001, n_clusters=25):
     return colors_prop, props_prop, focus_color, focus_prop
 
 # ═══════════════════════════════════════════════════════════
-# 色环构建函数 — 实色填充版
+# 色环构建函数
 # ═══════════════════════════════════════════════════════════
-
 def build_hue_wheel(colors_prop, props_prop, dominant_color, focus_main, wheel_size, dot_size=18):
-    """构建实色色相环（HSV 中 H-S 平面，V=1）"""
     fig = go.Figure()
-
     n_rings = 30
     n_sectors = 180
     dr = 1.0 / n_rings
@@ -202,7 +209,6 @@ def build_hue_wheel(colors_prop, props_prop, dominant_color, focus_main, wheel_s
         )
         pts_hover.append(hover_text)
 
-    # 每个色点单独 trace，hover 显示色块预览 + 信息
     for c, p, r, theta in zip(colors_prop, props_prop, pts_r, pts_theta):
         hex_val = mcolors.to_hex(c).upper()
         rgb_val = [int(x*255) for x in c]
@@ -249,12 +255,8 @@ def build_hue_wheel(colors_prop, props_prop, dominant_color, focus_main, wheel_s
     return fig
 
 def build_value_wheel(colors_prop, props_prop, dominant_color, focus_main, wheel_size, dot_size=18):
-    """构建实色明度环（HSV 中 S-V 平面，H=画面占比最多的主色色相）"""
     fig = go.Figure()
-
-    # 使用画面占比最多的颜色（dominant_color）的色相
     h_base = colorsys.rgb_to_hsv(*dominant_color)[0]
-
     n_rings = 30
     n_sectors = 180
     dr = 1.0 / n_rings
@@ -297,7 +299,6 @@ def build_value_wheel(colors_prop, props_prop, dominant_color, focus_main, wheel
         )
         pts_hover.append(hover_text)
 
-    # 每个色点单独 trace，hover 显示色块预览 + 信息
     for c, p, r, theta in zip(colors_prop, props_prop, pts_r, pts_theta):
         hex_val = mcolors.to_hex(c).upper()
         rgb_val = [int(x*255) for x in c]
@@ -343,7 +344,9 @@ def build_value_wheel(colors_prop, props_prop, dominant_color, focus_main, wheel
     )
     return fig
 
-# --- UI 渲染界面 ---
+# ═══════════════════════════════════════════════════════════
+# UI 渲染
+# ═══════════════════════════════════════════════════════════
 st.title("色彩协同画布")
 
 uploaded_file = st.file_uploader("导入设计资产 (JPG / PNG)...", type=["jpg", "png", "jpeg"])
@@ -354,7 +357,7 @@ if uploaded_file is not None:
     default_img_name = os.path.splitext(uploaded_file.name)[0]
 
     # ═══════════════════════════════════════════════════════════
-    # 侧边栏 — 紧凑优化版
+    # 侧边栏 — 紧凑优化版 + 选中色块放大预览
     # ═══════════════════════════════════════════════════════════
     st.sidebar.markdown("**调控中心**")
     palette_name = st.sidebar.text_input("色板名称", value=default_img_name)
@@ -397,7 +400,25 @@ if uploaded_file is not None:
     st.sidebar.image(img, use_container_width=True)
     st.sidebar.metric("提取色板数", len(colors_prop))
 
-    st.divider()
+    # ----- 侧边栏选中色块放大预览区域 -----
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("**🎨 选中色块 (放大预览)**")
+    selected = st.session_state.selected_color
+    if selected is not None:
+        st.sidebar.markdown(f"""
+        <div class="selected-preview">
+            <div class="big-swatch" style="background: {selected['hex']};"></div>
+            <div style="font-weight:bold; font-size:1rem;">{selected['hex']}</div>
+            <div style="font-size:0.85rem; color:#555;">rgb({selected['rgb']})</div>
+            <div style="font-size:0.85rem; color:#555;">占比 {selected['prop']:.2f}%</div>
+        </div>
+        """, unsafe_allow_html=True)
+        if st.sidebar.button("清除选中", use_container_width=True):
+            st.session_state.selected_color = None
+            st.rerun()
+    else:
+        st.sidebar.info("点击下方任意色卡，此处放大显示")
+    st.sidebar.divider()
 
     # ═══════════════════════════════════════════════════════════
     # 核心区域：色环
@@ -429,7 +450,7 @@ if uploaded_file is not None:
     st.divider()
 
     # ═══════════════════════════════════════════════════════════
-    # 色卡面板
+    # 色级面板 (条形图，保持不变)
     # ═══════════════════════════════════════════════════════════
     cv_1, cv_2 = st.columns([3, 2])
     with cv_1: st.markdown("<h3 style='margin:0;padding:0;font-size:1.1rem;'>色级面板</h3>", unsafe_allow_html=True)
@@ -516,7 +537,6 @@ if uploaded_file is not None:
                 hoverinfo='skip', showlegend=False
             ))
 
-        # 添加一个透明的 hover 点
         fig.add_trace(go.Scatter(
             x=[0.5], y=[0], mode='markers',
             marker=dict(size=0, opacity=0),
@@ -566,54 +586,89 @@ if uploaded_file is not None:
     st.subheader("色板数据总览")
 
     # ═══════════════════════════════════════════════════════════
-    # 色板列表 — 三列紧凑卡片式（已优化间距和信息密度）
+    # 色板列表 — 三列紧凑可点击按钮（无指针虚线 + 选中放大效果）
     # ═══════════════════════════════════════════════════════════
-    # 准备颜色数据
     card_data = []
-    for c, p in zip(colors_prop, props_prop):
+    for idx, (c, p) in enumerate(zip(colors_prop, props_prop)):
         hex_code = mcolors.to_hex(c).upper()
         rgb_str = f"{int(c[0]*255)},{int(c[1]*255)},{int(c[2]*255)}"
         card_data.append({
+            "index": idx,
             "hex": hex_code,
             "rgb": rgb_str,
             "prop": p * 100,
             "color": hex_code
         })
 
-    # 三列分块
+    # 分三列
     chunk_size = math.ceil(len(card_data) / 3)
     chunks = [card_data[i:i+chunk_size] for i in range(0, len(card_data), chunk_size)]
-    # 保证三列
     while len(chunks) < 3:
         chunks.append([])
+
     cols = st.columns(3)
+
+    # 定义点击回调函数（通过 session state 更新选中色块）
+    def on_color_click(color_info):
+        st.session_state.selected_color = color_info
+        # 无需 rerun，streamlit 会自动重新运行
 
     for col_idx, col in enumerate(cols):
         with col:
             for item in chunks[col_idx]:
-                # 紧凑卡片 HTML
-                st.markdown(f"""
-                <div class="compact-card" style="position:relative;cursor:pointer;" 
-                     onmouseenter="this.querySelector('.color-preview-popup').style.display='flex'" 
-                     onmouseleave="this.querySelector('.color-preview-popup').style.display='none'">
-                    <div class="flex-row">
-                        <div class="color-swatch" style="background: {item['color']};"></div>
-                        <span class="color-code">{item['hex']}</span>
-                        <span class="color-code">rgb({item['rgb']})</span>
-                        <div class="right-group">
-                            <span class="color-percent">{item['prop']:.2f}%</span>
-                        </div>
-                    </div>
-                    <div class="color-preview-popup" style="display:none;position:absolute;left:50%;bottom:100%;transform:translateX(-50%);margin-bottom:8px;z-index:100;background:white;border-radius:8px;padding:12px;box-shadow:0 4px 20px rgba(0,0,0,0.15);border:1px solid rgba(0,0,0,0.08);align-items:center;gap:12px;white-space:nowrap;">
-                        <div style="width:48px;height:48px;border-radius:6px;border:1px solid rgba(0,0,0,0.1);background:{item['color']};"></div>
-                        <div>
-                            <div style="font-size:13px;font-weight:600;color:#1f1f1f;">{item['hex']}</div>
-                            <div style="font-size:11px;color:#666;">rgb({item['rgb']})</div>
-                            <div style="font-size:11px;color:#666;">占比 {item['prop']:.2f}%</div>
-                        </div>
+                is_selected = (st.session_state.selected_color is not None and 
+                               st.session_state.selected_color.get("hex") == item["hex"])
+                # 动态附加选中样式类
+                btn_class = "color-card-btn"
+                if is_selected:
+                    btn_class += " selected-color-card"
+                # 使用 st.button 来获得干净的可点击组件
+                button_label = f"""
+                <div class="flex-row">
+                    <div class="color-swatch" style="background: {item['color']};"></div>
+                    <span class="color-code">{item['hex']}</span>
+                    <span class="color-code">rgb({item['rgb']})</span>
+                    <div class="right-group">
+                        <span class="color-percent">{item['prop']:.2f}%</span>
                     </div>
                 </div>
+                """
+                # 关键：按钮无 hand 光标、无轮廓、点击时更新选中状态
+                clicked = st.button(
+                    button_label,
+                    key=f"color_card_{item['index']}_{item['hex']}",
+                    use_container_width=True,
+                    help="点击放大预览"
+                )
+                # 应用自定义样式（移除默认按钮样式）
+                st.markdown(f"""
+                <style>
+                    div[data-testid="stButton"] button[key="color_card_{item['index']}_{item['hex']}"] {{
+                        background: rgba(128,128,128,0.03);
+                        border: 1px solid rgba(128,128,128,0.05);
+                        border-radius: 6px;
+                        padding: 6px 8px;
+                        text-align: left;
+                        cursor: default !important;
+                        transition: all 0.1s ease;
+                        font-family: inherit;
+                        font-size: 0.9rem;
+                        width: 100%;
+                        margin-bottom: 8px;
+                    }}
+                    div[data-testid="stButton"] button[key="color_card_{item['index']}_{item['hex']}"]:hover {{
+                        background: rgba(128,128,128,0.08);
+                        border-color: rgba(128,128,128,0.15);
+                    }}
+                    div[data-testid="stButton"] button[key="color_card_{item['index']}_{item['hex']}"]:focus,
+                    div[data-testid="stButton"] button[key="color_card_{item['index']}_{item['hex']}"]:active {{
+                        outline: none !important;
+                        box-shadow: none !important;
+                    }}
+                </style>
                 """, unsafe_allow_html=True)
+                if clicked:
+                    on_color_click(item)
 
     st.divider()
 
