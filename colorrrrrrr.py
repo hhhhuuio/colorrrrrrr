@@ -1,4 +1,4 @@
-import streamlit as st
+   import streamlit as st
 from PIL import Image  
 import numpy as np
 import matplotlib.pyplot as plt
@@ -20,8 +20,33 @@ st.markdown("""
     h3 { font-size: 1.0rem !important; }
     .stSlider, .stCheckbox { padding: 0px !important; margin: 0px !important; }
     div[data-testid="stBlock"] { padding: 5px !important; }
+    .palette-card {
+        border-radius:12px;
+        padding:10px;
+        border:1px solid rgba(128,128,128,.2);
+    }
     </style>
 """, unsafe_allow_html=True)
+
+
+# --- 布局模式选择 ---
+layout_mode = st.sidebar.radio(
+    "🖥️ 显示布局",
+    ["12.4寸平板模式", "15.6寸电脑模式"],
+    index=0
+)
+
+if layout_mode == "12.4寸平板模式":
+    PREVIEW_WIDTH = 420
+    WHEEL_SIZE = 420
+    PANEL_RATIO = [1, 1]
+    st.set_page_config(layout="centered")
+else:
+    PREVIEW_WIDTH = 650
+    WHEEL_SIZE = 560
+    PANEL_RATIO = [1.1, 1.2]
+    st.set_page_config(layout="wide")
+
 
 # --- 核心算法引擎 ---
 def analyze_image(img_obj, threshold=0.001, n_clusters=25):
@@ -61,12 +86,13 @@ if uploaded_file is not None:
     default_img_name = os.path.splitext(uploaded_file.name)[0]
     
     # 1. 置顶紧凑控制面板
-    st.markdown("### ⚙️ 调控中心")
+    st.sidebar.markdown("### ⚙️ 调控中心")
     
     # 【新增】色板组命名输入框
-    palette_name = st.text_input("📝 色板组名称 (默认使用图片名，支持修改)", value=default_img_name)
+    palette_name = st.sidebar.text_input("📝 色板组名称 (默认使用图片名，支持修改)", value=default_img_name)
     
-    c_ctrl1, c_ctrl2, c_ctrl3, c_ctrl4 = st.columns(4)
+    c_ctrl1, c_ctrl2 = st.sidebar.columns(2)
+    c_ctrl3, c_ctrl4 = st.sidebar.columns(2)
     with c_ctrl1:
         threshold = st.slider("微量色过滤阈值", 0.0001, 0.03, 0.001, format="%.4f")
     with c_ctrl2:
@@ -83,11 +109,11 @@ if uploaded_file is not None:
     st.divider()
     
     # 2. 核心并排联动层：原图 VS 交互色环
-    col_img, col_wheel = st.columns([1, 1])
+    col_img, col_wheel = st.columns(PANEL_RATIO)
     
     with col_img:
         st.subheader("🖼️ 原图预览")
-        st.image(img, use_container_width=False, width=380)
+        st.image(img, use_container_width=True if layout_mode=='15.6寸电脑模式' else False, width=PREVIEW_WIDTH)
         st.metric("有效提取色板总数", len(colors_prop))
         
     with col_wheel:
@@ -139,7 +165,7 @@ if uploaded_file is not None:
         
         fig_json.update_traces(selector=dict(mode='markers'), unselected=dict(marker_opacity=0.9))
         fig_json.update_layout(
-            width=360, height=360, margin=dict(l=10, r=10, t=10, b=10),
+            width=WHEEL_SIZE, height=WHEEL_SIZE, margin=dict(l=10, r=10, t=10, b=10),
             polar=dict(
                 angularaxis=dict(showticklabels=False, ticks='', showgrid=False),
                 radialaxis=dict(showticklabels=False, ticks='', showgrid=False)
@@ -152,6 +178,7 @@ if uploaded_file is not None:
 
     # 3. 垂直同列线性分析面板
     st.subheader("📊 垂直演化色级面板")
+    tab1,tab2,tab3,tab4=st.tabs(["覆盖率色卡","明度加权","等宽色卡","连续渐变"])
     
     st.markdown("**1. 画面覆盖率原始分配色卡 (按占比由大到小)**")
     fig_m1, ax_m1 = plt.subplots(figsize=(11, 0.5))
@@ -195,7 +222,20 @@ if uploaded_file is not None:
     ax_m4.axis('off')
     st.pyplot(fig_m4)
 
+    
     st.divider()
+    st.subheader("🎯 色板数据总览")
+
+    table_data = []
+    for c, p in zip(colors_prop, props_prop):
+        table_data.append({
+            "HEX": mcolors.to_hex(c).upper(),
+            "RGB": f"{int(c[0]*255)}, {int(c[1]*255)}, {int(c[2]*255)}",
+            "占比": f"{p*100:.2f}%"
+        })
+    st.dataframe(table_data, use_container_width=True)
+
+st.divider()
 
     # --- 4. 数据资产输出 (全新升级) ---
     st.subheader("💾 工业资产导出")
