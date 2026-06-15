@@ -19,33 +19,51 @@ st.set_page_config(page_title="色彩协同画布", layout="wide")
 # --- 全局紧凑样式注入 ---
 st.markdown("""
     <style>
-    html, body, [data-testid="stMarkdownContainer"] { font-size: 0.82rem !important; }
-    h1 { font-size: 1.5rem !important; font-weight: 700; padding-top: 0px; }
-    h2 { font-size: 1.1rem !important; margin-top: 8px; }
-    h3 { font-size: 0.95rem !important; }
+    /* 全局基础字号提升 */
+    html, body, [data-testid="stMarkdownContainer"], .stMarkdown, .stText, .stCodeBlock {
+        font-size: 0.95rem !important;
+        line-height: 1.4 !important;
+    }
+    h1 { font-size: 1.8rem !important; font-weight: 700; padding-top: 0px; margin-bottom: 0.5rem; }
+    h2 { font-size: 1.3rem !important; margin-top: 8px; margin-bottom: 0.4rem; }
+    h3 { font-size: 1.1rem !important; margin-top: 6px; margin-bottom: 0.3rem; }
     .stSlider, .stCheckbox { padding: 0px !important; margin: 0px !important; }
     div[data-testid="stBlock"] { padding: 4px !important; }
-    /* 侧边栏极致紧凑 */
-    [data-testid="stSidebar"] .block-container { padding: 1rem 0.8rem !important; }
-    [data-testid="stSidebar"] h3 { font-size: 0.85rem !important; margin: 4px 0 2px 0 !important; }
+    
+    /* 侧边栏极致紧凑但字号稍大 */
+    [data-testid="stSidebar"] .block-container {
+        padding: 1rem 0.8rem !important;
+        font-size: 0.88rem !important;
+    }
+    [data-testid="stSidebar"] h3 { font-size: 0.95rem !important; margin: 6px 0 4px 0 !important; }
     [data-testid="stSidebar"] .stRadio > div { padding: 2px 0 !important; }
-    [data-testid="stSidebar"] .stSlider { padding: 0 !important; margin: -4px 0 !important; }
+    [data-testid="stSidebar"] .stSlider { padding: 0 !important; margin: -2px 0 !important; }
     [data-testid="stSidebar"] .stCheckbox { padding: 0 !important; margin: -2px 0 !important; }
     [data-testid="stSidebar"] .stButton { padding: 2px 0 !important; }
     [data-testid="stSidebar"] hr { margin: 6px 0 !important; }
     [data-testid="stSidebar"] .stTextInput { padding: 0 !important; margin: -2px 0 !important; }
-    /* 色板表格紧凑双列 */
-    .color-table { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 0.85rem; }
-    .color-table th { border-bottom: 1px solid rgba(128,128,128,0.2); padding: 4px 6px; text-align: left; font-size: 0.8rem; }
+    [data-testid="stSidebar"] label, [data-testid="stSidebar"] .stSlider label {
+        font-size: 0.85rem !important;
+    }
+    
+    /* 色板表格（若仍使用table） */
+    .color-table { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 0.9rem; }
+    .color-table th { border-bottom: 1px solid rgba(128,128,128,0.2); padding: 4px 6px; text-align: left; font-size: 0.85rem; }
     .color-table td { border-bottom: 1px solid rgba(128,128,128,0.08); padding: 3px 6px; vertical-align: middle; }
     .color-preview { width: 28px; height: 20px; border-radius: 3px; border: 1px solid rgba(128,128,128,0.3); }
     .color-row { transition: background 0.15s; }
     .color-row:hover { background: rgba(128,128,128,0.06); }
-    .color-hover-info { display: none; font-size: 0.75rem; color: #666; margin-top: 2px; }
+    .color-hover-info { display: none; font-size: 0.8rem; color: #666; margin-top: 2px; }
     .color-row:hover .color-hover-info { display: block; }
+    
     /* 双列色板布局 */
     .palette-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
-    </style>
+    
+    /* 新卡片布局内部文字大小 */
+    .stMarkdown div {
+        font-size: 0.9rem;
+    }
+</style>
 """, unsafe_allow_html=True)
 
 
