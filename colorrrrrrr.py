@@ -202,13 +202,12 @@ def build_hue_wheel(colors_prop, props_prop, dominant_color, focus_main, wheel_s
         )
         pts_hover.append(hover_text)
 
-    # 每个色点单独 trace，hover 背景色即为该颜色
+    # 每个色点单独 trace，hover 显示色块预览 + 信息
     for c, p, r, theta in zip(colors_prop, props_prop, pts_r, pts_theta):
         hex_val = mcolors.to_hex(c).upper()
         rgb_val = [int(x*255) for x in c]
-        lum = 0.299*c[0] + 0.587*c[1] + 0.114*c[2]
-        font_color = "white" if lum < 0.5 else "black"
         hover_text = (
+            f"<span style='color:{hex_val};font-size:20px;'>██████</span><br>"
             f"<b>{hex_val}</b><br>"
             f"RGB: {rgb_val}<br>"
             f"占比: {p*100:.2f}%"
@@ -217,7 +216,7 @@ def build_hue_wheel(colors_prop, props_prop, dominant_color, focus_main, wheel_s
             r=[r], theta=[theta], mode='markers',
             marker=dict(size=dot_size, color=hex_val, line=dict(color='#ffffff', width=2)),
             text=[hover_text], hovertemplate="%{text}<extra></extra>",
-            hoverlabel=dict(bgcolor=hex_val, font_size=12, font_color=font_color, bordercolor="rgba(0,0,0,0.15)"),
+            hoverlabel=dict(bgcolor="white", font_size=12, bordercolor="rgba(0,0,0,0.15)"),
             showlegend=False
         ))
 
@@ -298,13 +297,12 @@ def build_value_wheel(colors_prop, props_prop, dominant_color, focus_main, wheel
         )
         pts_hover.append(hover_text)
 
-    # 每个色点单独 trace，hover 背景色即为该颜色
+    # 每个色点单独 trace，hover 显示色块预览 + 信息
     for c, p, r, theta in zip(colors_prop, props_prop, pts_r, pts_theta):
         hex_val = mcolors.to_hex(c).upper()
         rgb_val = [int(x*255) for x in c]
-        lum = 0.299*c[0] + 0.587*c[1] + 0.114*c[2]
-        font_color = "white" if lum < 0.5 else "black"
         hover_text = (
+            f"<span style='color:{hex_val};font-size:20px;'>██████</span><br>"
             f"<b>{hex_val}</b><br>"
             f"RGB: {rgb_val}<br>"
             f"占比: {p*100:.2f}%"
@@ -313,7 +311,7 @@ def build_value_wheel(colors_prop, props_prop, dominant_color, focus_main, wheel
             r=[r], theta=[theta], mode='markers',
             marker=dict(size=dot_size, color=hex_val, line=dict(color='#ffffff', width=2)),
             text=[hover_text], hovertemplate="%{text}<extra></extra>",
-            hoverlabel=dict(bgcolor=hex_val, font_size=12, font_color=font_color, bordercolor="rgba(0,0,0,0.15)"),
+            hoverlabel=dict(bgcolor="white", font_size=12, bordercolor="rgba(0,0,0,0.15)"),
             showlegend=False
         ))
 
@@ -447,17 +445,19 @@ if uploaded_file is not None:
                 x=[p], y=[0], base=[start], orientation='h',
                 marker=dict(color=hex_val, line=dict(width=0)),
                 hovertemplate=(
+                    f"<span style='color:{hex_val};font-size:20px;'>██████</span><br>"
                     f"<b>{hex_val}</b><br>"
                     f"RGB: {rgb_val}<br>"
                     f"占比: {p*100:.2f}%<extra></extra>"
                 ),
-                showlegend=False
+                showlegend=False,
+                hoverlabel=dict(bgcolor="white", font_size=12, bordercolor="rgba(0,0,0,0.15)")
             ))
             start += p
         fig.update_layout(
-            barmode='stack', height=40, margin=dict(l=0, r=0, t=0, b=0),
-            xaxis=dict(showgrid=False, showticklabels=False, zeroline=False, range=[0, 1]),
-            yaxis=dict(showgrid=False, showticklabels=False, zeroline=False),
+            barmode='stack', height=48, margin=dict(l=0, r=0, t=0, b=0),
+            xaxis=dict(showgrid=False, showticklabels=False, zeroline=False, range=[0, 1], fixedrange=True),
+            yaxis=dict(showgrid=False, showticklabels=False, zeroline=False, fixedrange=True),
             plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
             hovermode='x unified'
         )
@@ -473,15 +473,17 @@ if uploaded_file is not None:
                 x=[1/n_total], y=[0], base=[i/n_total], orientation='h',
                 marker=dict(color=hex_val, line=dict(width=0)),
                 hovertemplate=(
+                    f"<span style='color:{hex_val};font-size:20px;'>██████</span><br>"
                     f"<b>{hex_val}</b><br>"
                     f"RGB: {rgb_val}<extra></extra>"
                 ),
-                showlegend=False
+                showlegend=False,
+                hoverlabel=dict(bgcolor="white", font_size=12, bordercolor="rgba(0,0,0,0.15)")
             ))
         fig.update_layout(
-            barmode='stack', height=40, margin=dict(l=0, r=0, t=0, b=0),
-            xaxis=dict(showgrid=False, showticklabels=False, zeroline=False, range=[0, 1]),
-            yaxis=dict(showgrid=False, showticklabels=False, zeroline=False),
+            barmode='stack', height=48, margin=dict(l=0, r=0, t=0, b=0),
+            xaxis=dict(showgrid=False, showticklabels=False, zeroline=False, range=[0, 1], fixedrange=True),
+            yaxis=dict(showgrid=False, showticklabels=False, zeroline=False, fixedrange=True),
             plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
             hovermode='x unified'
         )
@@ -524,7 +526,7 @@ if uploaded_file is not None:
         ))
 
         fig.update_layout(
-            barmode='stack', height=40, margin=dict(l=0, r=0, t=0, b=0),
+            barmode='stack', height=48, margin=dict(l=0, r=0, t=0, b=0),
             xaxis=dict(showgrid=False, showticklabels=False, zeroline=False, range=[0, 1], fixedrange=True),
             yaxis=dict(showgrid=False, showticklabels=False, zeroline=False, fixedrange=True),
             plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
