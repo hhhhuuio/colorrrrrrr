@@ -73,6 +73,7 @@ st.markdown("""
         margin-bottom: 8px;
         transition: all 0.1s ease;
         border: 1px solid rgba(128,128,128,0.05);
+        overflow: visible !important;
     }
     .compact-card:hover {
         background: rgba(128,128,128,0.08);
@@ -123,6 +124,49 @@ st.markdown("""
     @media (max-width: 900px) {
         .compact-card .flex-row { gap: 6px; }
         .color-code { font-size: 0.7rem; }
+    }
+    
+    /* 修复：确保列容器不截断溢出内容 */
+    div[data-testid="stColumn"] {
+        overflow: visible !important;
+    }
+    div[data-testid="stVerticalBlock"] {
+        overflow: visible !important;
+    }
+    div[data-testid="stHorizontalBlock"] {
+        overflow: visible !important;
+    }
+    .element-container {
+        overflow: visible !important;
+    }
+    
+    /* 色卡预览弹窗样式 */
+    .color-preview-popup {
+        display: none;
+        position: absolute;
+        left: 50%;
+        bottom: 100%;
+        transform: translateX(-50%);
+        margin-bottom: 8px;
+        z-index: 9999;
+        background: white;
+        border-radius: 8px;
+        padding: 12px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+        border: 1px solid rgba(0,0,0,0.08);
+        align-items: center;
+        gap: 12px;
+        white-space: nowrap;
+        pointer-events: none;
+    }
+    .color-preview-popup::after {
+        content: '';
+        position: absolute;
+        top: 100%;
+        left: 50%;
+        transform: translateX(-50%);
+        border: 6px solid transparent;
+        border-top-color: white;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -445,17 +489,21 @@ if uploaded_file is not None:
                 x=[p], y=[0], base=[start], orientation='h',
                 marker=dict(color=hex_val, line=dict(width=0)),
                 hovertemplate=(
-                    f"<span style='color:{hex_val};font-size:20px;'>██████</span><br>"
                     f"<b>{hex_val}</b><br>"
                     f"RGB: {rgb_val}<br>"
                     f"占比: {p*100:.2f}%<extra></extra>"
                 ),
                 showlegend=False,
-                hoverlabel=dict(bgcolor="white", font_size=12, bordercolor="rgba(0,0,0,0.15)")
+                hoverlabel=dict(
+                    bgcolor="white",
+                    font_size=12,
+                    bordercolor="rgba(0,0,0,0.15)",
+                    namelength=0
+                )
             ))
             start += p
         fig.update_layout(
-            barmode='stack', height=48, margin=dict(l=0, r=0, t=0, b=0),
+            barmode='stack', height=80, margin=dict(l=0, r=0, t=10, b=10),
             xaxis=dict(showgrid=False, showticklabels=False, zeroline=False, range=[0, 1], fixedrange=True),
             yaxis=dict(showgrid=False, showticklabels=False, zeroline=False, fixedrange=True),
             plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
@@ -473,15 +521,19 @@ if uploaded_file is not None:
                 x=[1/n_total], y=[0], base=[i/n_total], orientation='h',
                 marker=dict(color=hex_val, line=dict(width=0)),
                 hovertemplate=(
-                    f"<span style='color:{hex_val};font-size:20px;'>██████</span><br>"
                     f"<b>{hex_val}</b><br>"
                     f"RGB: {rgb_val}<extra></extra>"
                 ),
                 showlegend=False,
-                hoverlabel=dict(bgcolor="white", font_size=12, bordercolor="rgba(0,0,0,0.15)")
+                hoverlabel=dict(
+                    bgcolor="white",
+                    font_size=12,
+                    bordercolor="rgba(0,0,0,0.15)",
+                    namelength=0
+                )
             ))
         fig.update_layout(
-            barmode='stack', height=48, margin=dict(l=0, r=0, t=0, b=0),
+            barmode='stack', height=80, margin=dict(l=0, r=0, t=10, b=10),
             xaxis=dict(showgrid=False, showticklabels=False, zeroline=False, range=[0, 1], fixedrange=True),
             yaxis=dict(showgrid=False, showticklabels=False, zeroline=False, fixedrange=True),
             plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
@@ -526,7 +578,7 @@ if uploaded_file is not None:
         ))
 
         fig.update_layout(
-            barmode='stack', height=48, margin=dict(l=0, r=0, t=0, b=0),
+            barmode='stack', height=80, margin=dict(l=0, r=0, t=10, b=10),
             xaxis=dict(showgrid=False, showticklabels=False, zeroline=False, range=[0, 1], fixedrange=True),
             yaxis=dict(showgrid=False, showticklabels=False, zeroline=False, fixedrange=True),
             plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
@@ -593,7 +645,7 @@ if uploaded_file is not None:
             for item in chunks[col_idx]:
                 # 紧凑卡片 HTML
                 st.markdown(f"""
-                <div class="compact-card" style="position:relative;cursor:pointer;" 
+                <div class="compact-card" style="position:relative;cursor:default;" 
                      onmouseenter="this.querySelector('.color-preview-popup').style.display='flex'" 
                      onmouseleave="this.querySelector('.color-preview-popup').style.display='none'">
                     <div class="flex-row">
@@ -604,8 +656,8 @@ if uploaded_file is not None:
                             <span class="color-percent">{item['prop']:.2f}%</span>
                         </div>
                     </div>
-                    <div class="color-preview-popup" style="display:none;position:absolute;left:50%;bottom:100%;transform:translateX(-50%);margin-bottom:8px;z-index:100;background:white;border-radius:8px;padding:12px;box-shadow:0 4px 20px rgba(0,0,0,0.15);border:1px solid rgba(0,0,0,0.08);align-items:center;gap:12px;white-space:nowrap;">
-                        <div style="width:48px;height:48px;border-radius:6px;border:1px solid rgba(0,0,0,0.1);background:{item['color']};"></div>
+                    <div class="color-preview-popup">
+                        <div style="width:48px;height:48px;border-radius:6px;border:1px solid rgba(0,0,0,0.1);background:{item['color']};flex-shrink:0;"></div>
                         <div>
                             <div style="font-size:13px;font-weight:600;color:#1f1f1f;">{item['hex']}</div>
                             <div style="font-size:11px;color:#666;">rgb({item['rgb']})</div>
